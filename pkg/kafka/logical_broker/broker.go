@@ -18,7 +18,8 @@ type Broker struct {
 
 	ephemeralID string
 
-	clusters map[string]*Cluster
+	controller *Controller
+	clusters   map[string]*Cluster
 }
 
 func InitBroker(log logr.Logger, advertiseListener *net.TCPAddr, clusterID string) (*Broker, error) {
@@ -67,7 +68,17 @@ func (b *Broker) registerCluster(name string, addrs []string) (*Cluster, error) 
 func (b *Broker) InitClusters() error {
 	// TODO: load from config or env vars
 
-	cluster, err := b.registerCluster("cluster1", []string{"localhost:9093"})
+	cluster, err := b.registerCluster("controller", []string{"localhost:19093"})
+	if err != nil {
+		return err
+	}
+
+	b.controller, err = NewController(b.log, cluster)
+	if err != nil {
+		return err
+	}
+
+	cluster, err = b.registerCluster("cluster1", []string{"localhost:9093"})
 	if err != nil {
 		return err
 	}
@@ -107,6 +118,10 @@ func (b *Broker) InitClusters() error {
 	})
 
 	return nil
+}
+
+func (b *Broker) GetController() *Controller {
+	return b.controller
 }
 
 func (b *Broker) GetTopics() []*topics.Topic {

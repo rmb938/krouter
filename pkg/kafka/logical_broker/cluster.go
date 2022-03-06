@@ -32,7 +32,15 @@ func NewCluster(name string, addrs []string, log logr.Logger) (*Cluster, error) 
 	var err error
 	cluster.kafkaClient, err = sarama.NewClient(addrs, saramaConfig)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error creating kafka client for cluster: %v: %w", name, err)
+	}
+
+	if err := cluster.kafkaClient.RefreshMetadata(); err != nil {
+		return nil, fmt.Errorf("error refreshing metadata for cluster: %v: %w", name, err)
+	}
+
+	if _, err := cluster.kafkaClient.RefreshController(); err != nil {
+		return nil, fmt.Errorf("error refreshing controller for cluster: %v: %w", name, err)
 	}
 
 	return cluster, nil

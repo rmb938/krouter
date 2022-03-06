@@ -4,14 +4,26 @@ networks:
     driver: bridge
 
 volumes:
+  zookeeperController:
   zookeeper1:
   zookeeper2:
   zookeeper3:
+  kafkaController:
   kafka1:
   kafka2:
   kafka3:
 
 services:
+  zookeeperController:
+    image: bitnami/zookeeper:3.6.2
+    container_name: zookeeperController
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    volumes:
+      - zookeeperController:/bitnami/zookeeper
+    networks:
+      - kafka-cluster
+
   zookeeper1:
     image: bitnami/zookeeper:3.6.2
     container_name: zookeeper1
@@ -39,6 +51,26 @@ services:
       - ALLOW_ANONYMOUS_LOGIN=yes
     volumes:
       - zookeeper3:/bitnami/zookeeper
+    networks:
+      - kafka-cluster
+
+  kafkaController:
+    image: bitnami/kafka:3.1.0
+    container_name: kafkaController
+    ports:
+      - '19093:19093'
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeperController:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=CLIENT://:9092,EXTERNAL://:19093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=CLIENT://kafkaController:9092,EXTERNAL://localhost:19093
+      - KAFKA_INTER_BROKER_LISTENER_NAME=CLIENT
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+    depends_on:
+      - zookeeperController
+    volumes:
+      - kafkaController:/bitnami/kafka
     networks:
       - kafka-cluster
 
