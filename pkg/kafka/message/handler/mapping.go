@@ -7,6 +7,7 @@ import (
 	handlerJoinGroupV4 "github.com/rmb938/krouter/pkg/kafka/message/handler/join_group/v4"
 	handlerLeaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/leave_group/v0"
 	v8 "github.com/rmb938/krouter/pkg/kafka/message/handler/metadata/v8"
+	handlerOffsetFetchV5 "github.com/rmb938/krouter/pkg/kafka/message/handler/offset_fetch/v5"
 	handlerProduceV7 "github.com/rmb938/krouter/pkg/kafka/message/handler/produce/v7"
 	handlerSyncGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/sync_group/v0"
 	implAPIVersion "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version"
@@ -21,6 +22,8 @@ import (
 	implLeaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch"
+	implOffsetFetchv5 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch/v5"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
 	producev7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group"
@@ -52,5 +55,8 @@ var MessageHandlerMapping = map[int16]map[int16]handler.MessageHandler{
 	},
 	leave_group.Key: {
 		implLeaveGroupV0.Version: &handlerLeaveGroupV0.Handler{},
+	},
+	offset_fetch.Key: {
+		implOffsetFetchv5.Version: &handlerOffsetFetchV5.Handler{},
 	},
 }

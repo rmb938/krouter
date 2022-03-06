@@ -55,8 +55,8 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 	}
 
 	if kafkaJoinGroupResponse != nil {
-		if time.Duration(kafkaJoinGroupResponse.ThrottleTime) > response.ThrottleDuration {
-			response.ThrottleDuration = time.Duration(kafkaJoinGroupResponse.ThrottleTime)
+		if time.Duration(kafkaJoinGroupResponse.ThrottleTime)*time.Millisecond > response.ThrottleDuration {
+			response.ThrottleDuration = time.Duration(kafkaJoinGroupResponse.ThrottleTime) * time.Millisecond
 		}
 
 		response.ErrCode = errors.KafkaError(kafkaJoinGroupResponse.Err)

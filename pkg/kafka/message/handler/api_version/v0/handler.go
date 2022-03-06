@@ -17,6 +17,8 @@ import (
 	implLeaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch"
+	implOffsetFetchv5 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch/v5"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
 	producev7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group"
@@ -73,6 +75,11 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			Key:        leave_group.Key,
 			MinVersion: implLeaveGroupV0.Version,
 			MaxVersion: implLeaveGroupV0.Version,
+		},
+		apiVersionv0.APIKey{
+			Key:        offset_fetch.Key,
+			MinVersion: implOffsetFetchv5.Version,
+			MaxVersion: implOffsetFetchv5.Version,
 		},
 	)
 
