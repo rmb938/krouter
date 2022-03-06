@@ -45,3 +45,12 @@ func (c *Controller) LeaveGroup(request *sarama.LeaveGroupRequest) (*sarama.Leav
 
 	return coordinatorBroker.LeaveGroup(request)
 }
+
+func (c *Controller) OffsetFetch(request *sarama.OffsetFetchRequest) (*sarama.OffsetFetchResponse, error) {
+	coordinatorBroker, err := c.findCoordinator(request.ConsumerGroup)
+	if err != nil {
+		return nil, err
+	}
+
+	return coordinatorBroker.FetchOffset(request)
+}

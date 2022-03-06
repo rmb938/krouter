@@ -64,7 +64,10 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 
 			rb, err := records.ParseRecordBatch(partitionData.Records)
 			if err != nil {
-				return fmt.Errorf("error parsing record patch: %w", err)
+				log.Error(err, "Client tried to produce a record that is invalid")
+				partitionResponse.ErrCode = errors.InvalidRecord
+				produceResponse.PartitionResponses = append(produceResponse.PartitionResponses, partitionResponse)
+				continue
 			}
 
 			kafkaProduceRequest := &sarama.ProduceRequest{

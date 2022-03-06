@@ -34,6 +34,8 @@ const (
 	timestampTypeMask = 0x08
 )
 
+var UnsupportedMagic = fmt.Errorf("record batch magic number is unsupported")
+
 type CompressionCodec int8
 
 type RecordBatch struct {
@@ -75,6 +77,9 @@ func ParseRecordBatch(recordBatchBytes []byte) (*RecordBatch, error) {
 	rb.Magic, err = decoder.Int8()
 	if err != nil {
 		return nil, err
+	}
+	if rb.Magic != int8(2) {
+		return nil, UnsupportedMagic
 	}
 
 	_, err = decoder.Int32()
