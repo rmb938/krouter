@@ -8,7 +8,6 @@ import (
 
 	"github.com/rmb938/krouter/pkg/kafka/client"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
-	"github.com/rmb938/krouter/pkg/storage"
 )
 
 type Router struct {
@@ -20,7 +19,7 @@ type Router struct {
 	broker *logical_broker.Broker
 }
 
-func (r *Router) StartServer(listener, advertiseListener *net.TCPAddr, database storage.Database, brokerId int32) error {
+func (r *Router) ListenAndServe(listener, advertiseListener *net.TCPAddr, clusterID string) error {
 	r.Log.Info("Starting Router")
 
 	r.packetProcessor = &PacketProcessor{
@@ -33,7 +32,11 @@ func (r *Router) StartServer(listener, advertiseListener *net.TCPAddr, database 
 		return fmt.Errorf("error creating listener %w", err)
 	}
 
-	r.broker, err = logical_broker.InitBroker(r.Log, database, brokerId, advertiseListener)
+	defer func() {
+		r.listener.Close()
+	}()
+
+	r.broker, err = logical_broker.InitBroker(r.Log, advertiseListener, clusterID)
 	if err != nil {
 		return err
 	}
@@ -41,14 +44,17 @@ func (r *Router) StartServer(listener, advertiseListener *net.TCPAddr, database 
 	return r.serverLoop()
 }
 
+func (r *Router) Shutdown() error {
+	return r.listener.Close()
+}
+
 func (r *Router) serverLoop() error {
-	defer func() {
-		r.listener.Close()
-	}()
+	for {
+		conn, err := r.listener.Accept()
+		if err != nil {
+			return err
+		}
 
-	var err error
-
-	for conn, err := r.listener.Accept(); err == nil; conn, err = r.listener.Accept() {
 		log := r.Log.WithValues("from-address", conn.RemoteAddr().String())
 
 		log.V(-1).Info("Accepted Connection")
@@ -66,5 +72,4 @@ func (r *Router) serverLoop() error {
 			}
 		}()
 	}
-	return err
 }

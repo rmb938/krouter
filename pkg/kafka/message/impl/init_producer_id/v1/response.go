@@ -1,18 +1,16 @@
-package v0
+package v1
 
 import (
+	"time"
+
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 )
 
-type APIKey struct {
-	Key        int16
-	MinVersion int16
-	MaxVersion int16
-}
-
 type Response struct {
-	ErrCode errors.KafkaError
-	APIKeys []APIKey
+	ThrottleDuration time.Duration
+	ErrCode          errors.KafkaError
+	ProducerID       int64
+	ProducerEpoch    int16
 }
 
 func (r *Response) Version() int16 {

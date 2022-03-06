@@ -3,6 +3,7 @@ package codec
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 )
@@ -19,7 +20,7 @@ type RawDecoder struct {
 func (pd *RawDecoder) Close() error {
 
 	if pd.Buff.Len() > 0 {
-		return fmt.Errorf("closed raw decoder while there was still data to decode %d bytes left", pd.Buff.Len())
+		return fmt.Errorf("closed raw decoder while there was still data to decode %d bytes left: %v", pd.Buff.Len(), hex.EncodeToString(pd.Buff.Next(pd.Buff.Len())))
 	}
 
 	return nil
@@ -198,4 +199,12 @@ func (pd *RawDecoder) ArrayLength() (int32, error) {
 
 func (pd *RawDecoder) CompactArrayLength() (uint64, error) {
 	return pd.UVarInt()
+}
+
+func (pd *RawDecoder) Records() ([]byte, error) {
+	return pd.NullableBytes()
+}
+
+func (pd *RawDecoder) CompactRecords() ([]byte, error) {
+	return pd.CompactNullableBytes()
 }

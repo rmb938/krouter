@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	apiVersionv0 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v0"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 
 	"github.com/rmb938/krouter/pkg/kafka/client"
 	"github.com/rmb938/krouter/pkg/kafka/message/codec"
@@ -47,7 +49,14 @@ func (pp *PacketProcessor) processPacket(client *client.Client) error {
 
 	decoder, ok := decoderMap[inPacket.ReqHeader.Version]
 	if !ok {
-		return fmt.Errorf("no decoder for request_api_version: %d", inPacket.ReqHeader.Version)
+		log.Error(nil, "could not find a packet decoder")
+		err := client.WriteMessage(&apiVersionv0.Response{ErrCode: errors.UnsupportedVersion}, inPacket.ReqHeader.CorrelationId)
+		if err != nil {
+			return err
+		}
+
+		// return fmt.Errorf("no decoder for request_api_key: %v request_api_version: %d", inPacket.ReqHeader.Key, inPacket.ReqHeader.Version)
+		return nil
 	}
 
 	handlerMap, ok := handler.MessageHandlerMapping[inPacket.ReqHeader.Key]

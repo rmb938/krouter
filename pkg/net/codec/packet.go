@@ -42,7 +42,7 @@ func (p *Packet) Encode(correlationId int32) ([]byte, error) {
 	}
 
 	if *p.Key != 3 {
-		fmt.Printf("Version: %v Length: %v Data: %v\n", header.Version, len(p.Data), p.Data)
+		fmt.Printf("Key: %v Version: %v Length: %v Data: %v\n", *p.Key, header.Version, len(p.Data), p.Data)
 	}
 
 	// return header + data
