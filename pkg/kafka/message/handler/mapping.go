@@ -7,6 +7,7 @@ import (
 	handlerJoinGroupV4 "github.com/rmb938/krouter/pkg/kafka/message/handler/join_group/v4"
 	v8 "github.com/rmb938/krouter/pkg/kafka/message/handler/metadata/v8"
 	handlerProduceV7 "github.com/rmb938/krouter/pkg/kafka/message/handler/produce/v7"
+	handlerSyncGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/sync_group/v0"
 	implAPIVersion "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version"
 	implAPIVersionV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/find_coordinator"
@@ -19,6 +20,8 @@ import (
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
 	producev7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group"
+	implSyncGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group/v0"
 	"github.com/rmb938/krouter/pkg/net/message/handler"
 )
 
@@ -40,5 +43,8 @@ var MessageHandlerMapping = map[int16]map[int16]handler.MessageHandler{
 	},
 	join_group.Key: {
 		implJoinGroupV4.Version: &handlerJoinGroupV4.Handler{},
+	},
+	sync_group.Key: {
+		implSyncGroupV0.Version: &handlerSyncGroupV0.Handler{},
 	},
 }

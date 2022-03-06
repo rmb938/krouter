@@ -17,6 +17,8 @@ import (
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
 	producev7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group"
+	implSyncGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group/v0"
 	"github.com/rmb938/krouter/pkg/net/message"
 )
 
@@ -59,6 +61,11 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			Key:        join_group.Key,
 			MinVersion: implJoinGroupV4.Version,
 			MaxVersion: implJoinGroupV4.Version,
+		},
+		apiVersionv0.APIKey{
+			Key:        sync_group.Key,
+			MinVersion: implSyncGroupV0.Version,
+			MaxVersion: implSyncGroupV0.Version,
 		},
 	)
 

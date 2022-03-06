@@ -20,10 +20,8 @@ func (h *RequestHeader) Decode(pd *RawDecoder) (err error) {
 		return err
 	}
 
-	if h.Key == 18 || h.Version >= 1 {
-		if h.ClientID, err = pd.NullableString(); err != nil {
-			return err
-		}
+	if h.ClientID, err = pd.NullableString(); err != nil {
+		return err
 	}
 
 	// if h.Key == 18 || h.Version >= 2 {

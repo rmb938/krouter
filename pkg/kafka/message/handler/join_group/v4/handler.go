@@ -49,8 +49,6 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		log.Error(err, "Error joining group to backend cluster")
 		if kafkaError, ok := err.(sarama.KError); ok {
 			response.ErrCode = errors.KafkaError(kafkaError)
-		} else if err == sarama.ErrControllerNotAvailable {
-			response.ErrCode = errors.UnknownServerError
 		} else {
 			return fmt.Errorf("error joining group to backend cluster: %w", err)
 		}
