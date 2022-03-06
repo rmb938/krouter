@@ -1,4 +1,4 @@
-package v5
+package v7
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/rmb938/krouter/pkg/kafka/client"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
-	v5 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v5"
+	v7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
 	"github.com/rmb938/krouter/pkg/kafka/records"
 	"github.com/rmb938/krouter/pkg/net/message"
 )
@@ -15,11 +15,13 @@ type Handler struct {
 }
 
 func (h *Handler) Handle(client *client.Client, message message.Message, correlationId int32) error {
-	request := message.(*v5.Request)
+	request := message.(*v7.Request)
 
-	response := &v5.Response{}
+	response := &v7.Response{}
 
-	kafkaClient, err := sarama.NewClient([]string{"localhost:9094"}, sarama.NewConfig())
+	saramaConfig := sarama.NewConfig()
+	saramaConfig.Version = sarama.V2_6_0_0
+	kafkaClient, err := sarama.NewClient([]string{"localhost:9094"}, saramaConfig)
 	if err != nil {
 		return fmt.Errorf("error creating sarama client: %w", err)
 	}
@@ -27,12 +29,12 @@ func (h *Handler) Handle(client *client.Client, message message.Message, correla
 	defer kafkaClient.Close()
 
 	for _, topicData := range request.TopicData {
-		produceResponse := v5.ProduceResponse{
+		produceResponse := v7.ProduceResponse{
 			Name: topicData.Name,
 		}
 
 		for _, partitionData := range topicData.PartitionData {
-			partitionResponse := v5.PartitionResponse{
+			partitionResponse := v7.PartitionResponse{
 				Index:   partitionData.Index,
 				ErrCode: errors.None,
 			}
@@ -60,21 +62,20 @@ func (h *Handler) Handle(client *client.Client, message message.Message, correla
 			}
 
 			kafkaRb := &sarama.RecordBatch{
-				FirstOffset:           rb.BaseOffset,
-				PartitionLeaderEpoch:  rb.PartitionLeaderEpoch,
-				Version:               rb.Magic,
-				Codec:                 0,     // TODO: pull from rb attributes
-				CompressionLevel:      0,     // TODO: pull from rb attributes
-				Control:               false, // TODO: pull from rb attributes
-				LogAppendTime:         false, // TODO: pull from rb attributes
-				LastOffsetDelta:       rb.LastOffsetDelta,
-				FirstTimestamp:        rb.FirstTimestamp,
-				MaxTimestamp:          rb.MaxTimestamp,
-				ProducerID:            rb.ProducerID,
-				ProducerEpoch:         rb.ProducerEpoch,
-				FirstSequence:         rb.BaseSequence,
-				PartialTrailingRecord: false, // TODO: pull from rb attributes
-				IsTransactional:       false, // TODO: pull from rb attributes
+				FirstOffset:          rb.BaseOffset,
+				PartitionLeaderEpoch: rb.PartitionLeaderEpoch,
+				Version:              rb.Magic,
+				Codec:                sarama.CompressionCodec(rb.GetCodec()),
+				CompressionLevel:     sarama.CompressionLevelDefault, // need to set this so records are re-compressed correctly
+				Control:              rb.IsControl(),
+				LogAppendTime:        rb.IsLogAppendTime(),
+				LastOffsetDelta:      rb.LastOffsetDelta,
+				FirstTimestamp:       rb.FirstTimestamp,
+				MaxTimestamp:         rb.MaxTimestamp,
+				ProducerID:           rb.ProducerID,
+				ProducerEpoch:        rb.ProducerEpoch,
+				FirstSequence:        rb.BaseSequence,
+				IsTransactional:      rb.IsTransactional(),
 			}
 
 			for _, r := range rb.Records {

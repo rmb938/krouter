@@ -1,9 +1,9 @@
-package v5
+package v7
 
 import (
 	"time"
 
-	v5 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v5"
+	v7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
 	"github.com/rmb938/krouter/pkg/net/codec"
 	"github.com/rmb938/krouter/pkg/net/message"
 )
@@ -13,7 +13,7 @@ type Decoder struct {
 
 func (d *Decoder) Decode(reader *codec.PackerReader) (message.Message, error) {
 
-	msg := &v5.Request{}
+	msg := &v7.Request{}
 
 	var err error
 	msg.TransactionalID, err = reader.NullableString()
@@ -40,7 +40,7 @@ func (d *Decoder) Decode(reader *codec.PackerReader) (message.Message, error) {
 
 	if topicDataLength > 0 {
 		for i := int32(0); i < topicDataLength; i++ {
-			topicData := v5.TopicData{}
+			topicData := v7.TopicData{}
 
 			topicData.Name, err = reader.String()
 			if err != nil {
@@ -54,7 +54,7 @@ func (d *Decoder) Decode(reader *codec.PackerReader) (message.Message, error) {
 
 			if partitionDataLength > 0 {
 				for i := int32(0); i < partitionDataLength; i++ {
-					partitionData := v5.PartitionData{}
+					partitionData := v7.PartitionData{}
 
 					partitionData.Index, err = reader.Int32()
 					if err != nil {

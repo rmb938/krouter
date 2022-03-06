@@ -11,7 +11,7 @@ import (
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
-	producev5 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v5"
+	producev7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
 	"github.com/rmb938/krouter/pkg/net/message"
 )
 
@@ -27,8 +27,8 @@ func (h *Handler) Handle(client *client.Client, message message.Message, correla
 	response.APIKeys = append(response.APIKeys,
 		apiVersionv0.APIKey{
 			Key:        produce.Key,
-			MinVersion: producev5.Version,
-			MaxVersion: producev5.Version,
+			MinVersion: producev7.Version,
+			MaxVersion: producev7.Version,
 		},
 		apiVersionv0.APIKey{
 			Key:        metadata.Key,

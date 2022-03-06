@@ -1,10 +1,10 @@
-package v5
+package v7
 
 import (
 	"time"
 
-	"github.com/rmb938/krouter/pkg/kafka/message/impl/init_producer_id"
-	v5 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v5"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
+	v7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
 	"github.com/rmb938/krouter/pkg/net/codec"
 	"github.com/rmb938/krouter/pkg/net/message"
 )
@@ -13,9 +13,9 @@ type Encoder struct {
 }
 
 func (e *Encoder) Encode(message message.Message) (*codec.Packet, error) {
-	msg := message.(*v5.Response)
+	msg := message.(*v7.Response)
 
-	builder := codec.NewPacketBuilder(init_producer_id.Key, msg.Version())
+	builder := codec.NewPacketBuilder(produce.Key, msg.Version())
 
 	// responses
 	builder.Encoder.ArrayLength(len(msg.Responses))

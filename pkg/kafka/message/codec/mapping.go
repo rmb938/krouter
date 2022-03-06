@@ -7,7 +7,7 @@ import (
 	v2 "github.com/rmb938/krouter/pkg/kafka/message/codec/api_version/v2"
 	v1 "github.com/rmb938/krouter/pkg/kafka/message/codec/init_producer_id/v1"
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/codec/metadata/v8"
-	producev5 "github.com/rmb938/krouter/pkg/kafka/message/codec/produce/v5"
+	producev7 "github.com/rmb938/krouter/pkg/kafka/message/codec/produce/v7"
 	implAPIVersion "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version"
 	implAPIVersionV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v0"
 	implAPIVersionV2 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v2"
@@ -16,7 +16,7 @@ import (
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
 	implMetadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
-	implProducev5 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v5"
+	implProducev7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
 	"github.com/rmb938/krouter/pkg/net/message"
 )
 
@@ -32,7 +32,7 @@ var MessageDecoderMapping = map[int16]map[int16]message.Decoder{
 		initProducerIDV1.Version: &v1.Decoder{},
 	},
 	produce.Key: {
-		implProducev5.Version: &producev5.Decoder{},
+		implProducev7.Version: &producev7.Decoder{},
 	},
 }
 
@@ -41,5 +41,5 @@ var MessageEncoderMapping = map[reflect.Type]message.Encoder{
 	reflect.TypeOf(implAPIVersionV2.Response{}): &v2.Encoder{},
 	reflect.TypeOf(implMetadatav8.Response{}):   &metadatav8.Encoder{},
 	reflect.TypeOf(initProducerIDV1.Response{}): &v1.Encoder{},
-	reflect.TypeOf(implProducev5.Response{}):    &producev5.Encoder{},
+	reflect.TypeOf(implProducev7.Response{}):    &producev7.Encoder{},
 }
