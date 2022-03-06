@@ -17,7 +17,7 @@ type RecordBatch struct {
 	ProducerID           int64
 	ProducerEpoch        int16
 	BaseSequence         int32
-	Records              []Record
+	Records              []*Record
 }
 
 func ParseRecordBatch(recordBatchBytes []byte) (*RecordBatch, error) {
@@ -106,10 +106,11 @@ func ParseRecordBatch(recordBatchBytes []byte) (*RecordBatch, error) {
 			return nil, err
 		}
 
-		record.TimeStampDelta, err = decoder.VarInt()
+		timestampDelta, err := decoder.VarInt()
 		if err != nil {
 			return nil, err
 		}
+		record.TimeStampDelta = time.Duration(timestampDelta)
 
 		record.OffsetDelta, err = decoder.VarInt()
 		if err != nil {
@@ -147,7 +148,7 @@ func ParseRecordBatch(recordBatchBytes []byte) (*RecordBatch, error) {
 			record.Headers = append(record.Headers, header)
 		}
 
-		rb.Records = append(rb.Records, *record)
+		rb.Records = append(rb.Records, record)
 	}
 
 	err = decoder.Close()

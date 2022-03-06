@@ -49,13 +49,13 @@ func (pp *PacketProcessor) processPacket(client *client.Client) error {
 
 	decoder, ok := decoderMap[inPacket.ReqHeader.Version]
 	if !ok {
-		log.Error(nil, "could not find a packet decoder")
+		log.Error(nil, "could not find a packet decoder, so returning unsupported version")
 		err := client.WriteMessage(&apiVersionv0.Response{ErrCode: errors.UnsupportedVersion}, inPacket.ReqHeader.CorrelationId)
 		if err != nil {
 			return err
 		}
 
-		// return fmt.Errorf("no decoder for request_api_key: %v request_api_version: %d", inPacket.ReqHeader.Key, inPacket.ReqHeader.Version)
+		// don't error here so the kafka client can gracefully recover
 		return nil
 	}
 

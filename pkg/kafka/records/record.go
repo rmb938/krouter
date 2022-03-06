@@ -1,5 +1,7 @@
 package records
 
+import "time"
+
 type RecordHeader struct {
 	Key   []byte
 	Value []byte
@@ -7,7 +9,7 @@ type RecordHeader struct {
 
 type Record struct {
 	Attributes     int8
-	TimeStampDelta int64
+	TimeStampDelta time.Duration
 	OffsetDelta    int64
 	Key            []byte
 	Value          []byte
