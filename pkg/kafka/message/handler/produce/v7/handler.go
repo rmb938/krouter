@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Shopify/sarama"
+	"github.com/go-logr/logr"
 	"github.com/rmb938/krouter/pkg/kafka/client"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	v7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
@@ -14,7 +15,8 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, message message.Message, correlationId int32) error {
+func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
+	log = log.WithName("produce-v7-handler")
 	request := message.(*v7.Request)
 
 	response := &v7.Response{}
@@ -30,30 +32,39 @@ func (h *Handler) Handle(client *client.Client, message message.Message, correla
 	defer kafkaClient.Close()
 
 	for _, topicData := range request.TopicData {
+		log = log.WithValues("topic", topicData.Name)
 		produceResponse := v7.ProduceResponse{
 			Name: topicData.Name,
 		}
 
+		cluster, topic := client.Broker.GetTopic(topicData.Name)
+
 		for _, partitionData := range topicData.PartitionData {
+			log = log.WithValues("partition", partitionData.Index)
 			partitionResponse := v7.PartitionResponse{
 				Index:   partitionData.Index,
 				ErrCode: errors.None,
 			}
 
+			if topic == nil {
+				// Topic is not found so don't do anything else
+				log.V(1).Info("Client tried to produce to a topic that doesn't exist")
+				partitionResponse.ErrCode = errors.UnknownTopicOrPartition
+				produceResponse.PartitionResponses = append(produceResponse.PartitionResponses, partitionResponse)
+				continue
+			}
+
+			if partitionData.Index >= topic.Partitions {
+				// Partition is not found so don't do anything else
+				log.V(1).Info("Client tried to produce to a topic partition that doesn't exist")
+				partitionResponse.ErrCode = errors.UnknownTopicOrPartition
+				produceResponse.PartitionResponses = append(produceResponse.PartitionResponses, partitionResponse)
+				continue
+			}
+
 			rb, err := records.ParseRecordBatch(partitionData.Records)
 			if err != nil {
 				return fmt.Errorf("error parsing record patch: %w", err)
-			}
-
-			broker, err := kafkaClient.Leader(topicData.Name, partitionData.Index)
-			if err != nil {
-				if kafkaError, ok := err.(sarama.KError); ok {
-					partitionResponse.ErrCode = errors.KafkaError(kafkaError)
-					produceResponse.PartitionResponses = append(produceResponse.PartitionResponses, partitionResponse)
-					continue
-				}
-
-				return fmt.Errorf("error finding kafka topic partition leader: %w", err)
 			}
 
 			kafkaProduceRequest := &sarama.ProduceRequest{
@@ -101,11 +112,16 @@ func (h *Handler) Handle(client *client.Client, message message.Message, correla
 
 			kafkaProduceRequest.AddBatch(topicData.Name, partitionData.Index, kafkaRb)
 
-			kafkaProduceResponse, err := broker.Produce(kafkaProduceRequest)
+			kafkaProduceResponse, err := cluster.Produce(topic, partitionData.Index, kafkaProduceRequest)
 			if err != nil {
+				log.Error(err, "Error producing message to backend cluster")
 				if kafkaError, ok := err.(sarama.KError); ok {
 					partitionResponse.ErrCode = errors.KafkaError(kafkaError)
 					produceResponse.PartitionResponses = append(produceResponse.PartitionResponses, partitionResponse)
+
+					if kafkaProduceResponse.ThrottleTime > response.ThrottleDuration {
+						response.ThrottleDuration = kafkaProduceResponse.ThrottleTime
+					}
 					continue
 				}
 				return fmt.Errorf("error producing to kafka: %w", err)

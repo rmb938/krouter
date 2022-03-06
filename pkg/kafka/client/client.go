@@ -45,7 +45,7 @@ func (c *Client) WriteMessage(msg message.Message, correlationId int32) error {
 		return fmt.Errorf("error encoding message: %w", err)
 	}
 
-	c.log.V(-1).Info("Writing message", "correlation_id", correlationId)
+	c.log.V(1).Info("Writing message", "correlation_id", correlationId)
 	return c.writePacket(packet, correlationId)
 }
 
@@ -55,7 +55,7 @@ func (c *Client) writePacket(packet *netCodec.Packet, correlationId int32) error
 		return fmt.Errorf("error encoding packet: %w", err)
 	}
 
-	c.log.V(-1).Info("Writing packet", "key", packet.Key, "correlation_id", correlationId)
+	c.log.V(1).Info("Writing packet", "key", packet.Key, "correlation_id", correlationId)
 	_, err = c.conn.Write(data)
 	if err != nil {
 		return fmt.Errorf("error writting packet data: %w", err)
@@ -73,6 +73,6 @@ func (c *Client) ReadFull(buf []byte) (n int, err error) {
 }
 
 func (c *Client) Close() error {
-	c.log.V(-1).Info("Closed Connection")
+	c.log.V(1).Info("Closed Connection")
 	return c.conn.Close()
 }

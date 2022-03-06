@@ -21,13 +21,13 @@ type PacketProcessor struct {
 func (pp *PacketProcessor) processPacket(client *client.Client) error {
 	log := pp.Log.WithValues("from-address", client.RemoteAddr().String())
 
-	log.V(-1).Info("Reading Packet Length")
+	log.V(1).Info("Reading Packet Length")
 	packetLength, err := pp.readPacketLength(client)
 	if err != nil {
 		return fmt.Errorf("error reading packet length: %w", err)
 	}
 
-	log.V(-1).Info("Reading Packet Body", "length", packetLength)
+	log.V(1).Info("Reading Packet Body", "length", packetLength)
 	inPacketEncoded := make([]byte, packetLength)
 	if _, err := client.ReadFull(inPacketEncoded); err != nil {
 		return fmt.Errorf("error reading body of packet: %w", err)
@@ -69,7 +69,7 @@ func (pp *PacketProcessor) processPacket(client *client.Client) error {
 		return fmt.Errorf("no handler for packet version: %d", inPacket.ReqHeader.Version)
 	}
 
-	log.V(-1).Info("decoding packet")
+	log.V(1).Info("decoding packet")
 	message, err := decoder.Decode(packetReader)
 	if err != nil {
 		return fmt.Errorf("error decoding packet request_api_key: %d request_api_version: %d error: %w", inPacket.ReqHeader.Key, inPacket.ReqHeader.Version, err)
@@ -79,8 +79,9 @@ func (pp *PacketProcessor) processPacket(client *client.Client) error {
 		return fmt.Errorf("error closing packet reader request_api_key: %d request_api_version: %d error: %w", inPacket.ReqHeader.Key, inPacket.ReqHeader.Version, err)
 	}
 
-	log.V(-1).Info("handling packet")
-	err = inHandler.Handle(client, message, inPacket.ReqHeader.CorrelationId)
+	// TODO: figure out throttling stuff
+	log.V(1).Info("handling packet")
+	err = inHandler.Handle(client, pp.Log.WithValues("from-address", client.RemoteAddr().String()), message, inPacket.ReqHeader.CorrelationId)
 	if err != nil {
 		return fmt.Errorf("error handling packet: %w", err)
 	}
@@ -88,7 +89,7 @@ func (pp *PacketProcessor) processPacket(client *client.Client) error {
 	return nil
 }
 
-func (pp *PacketProcessor) readPacketLength(client *client.Client) (uint32, error) {
+func (pp *PacketProcessor) readPacketLength(client *client.Client) (int64, error) {
 	packetLengthBytes := make([]byte, 4)
 	if _, err := client.ReadFull(packetLengthBytes); err != nil {
 		return 0, fmt.Errorf("error reading length of packet: %w", err)
@@ -99,5 +100,5 @@ func (pp *PacketProcessor) readPacketLength(client *client.Client) (uint32, erro
 		return 0, fmt.Errorf("packet length is 0 bytes")
 	}
 
-	return packetLength, nil
+	return int64(packetLength), nil
 }

@@ -1,6 +1,7 @@
 package v8
 
 import (
+	"github.com/go-logr/logr"
 	"github.com/rmb938/krouter/pkg/kafka/client"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
@@ -10,7 +11,9 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, message message.Message, correlationId int32) error {
+func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
+	log = log.WithName("metadata-v8-handler")
+
 	request := message.(*metadatav8.Request)
 
 	response := &metadatav8.Response{}
@@ -29,24 +32,33 @@ func (h *Handler) Handle(client *client.Client, message message.Message, correla
 	response.ControllerID = 1
 
 	for _, topicName := range request.Topics {
-		// TODO: don't just blindly return this, pull from known topics
+		log = log.WithValues("topic", topicName)
 
-		response.Topics = append(response.Topics,
-			metadatav8.Topics{
-				ErrCode:  errors.None,
-				Name:     topicName,
-				Internal: false,
-				Partitions: []metadatav8.Partitions{
-					{
-						Index:           0,
+		responseTopic := metadatav8.Topics{
+			ErrCode:  errors.UnknownTopicOrPartition,
+			Name:     topicName,
+			Internal: false,
+		}
+
+		_, topic := client.Broker.GetTopic(topicName)
+		if topic != nil {
+			responseTopic.ErrCode = errors.None
+
+			for i := int32(0); i < topic.Partitions; i++ {
+				responseTopic.Partitions = append(responseTopic.Partitions,
+					metadatav8.Partitions{
+						Index:           i,
 						LeaderID:        1,
 						ReplicaNodes:    []int32{1},
 						ISRNodes:        []int32{1},
 						OfflineReplicas: []int32{},
-					},
-				},
-			},
-		)
+					})
+			}
+		} else {
+			log.V(1).Info("Client tried to get metadata for a topic that doesn't exist")
+		}
+
+		response.Topics = append(response.Topics, responseTopic)
 	}
 
 	return client.WriteMessage(response, correlationId)

@@ -31,12 +31,14 @@ func (r *Router) ListenAndServe(listener, advertiseListener *net.TCPAddr, cluste
 	if err != nil {
 		return fmt.Errorf("error creating listener %w", err)
 	}
-
-	defer func() {
-		r.listener.Close()
-	}()
+	defer r.listener.Close()
 
 	r.broker, err = logical_broker.InitBroker(r.Log, advertiseListener, clusterID)
+	if err != nil {
+		return err
+	}
+
+	err = r.broker.InitClusters()
 	if err != nil {
 		return err
 	}
@@ -45,7 +47,8 @@ func (r *Router) ListenAndServe(listener, advertiseListener *net.TCPAddr, cluste
 }
 
 func (r *Router) Shutdown() error {
-	return r.listener.Close()
+	// TODO: do something here to stop the serverLoop
+	return nil
 }
 
 func (r *Router) serverLoop() error {
@@ -57,7 +60,7 @@ func (r *Router) serverLoop() error {
 
 		log := r.Log.WithValues("from-address", conn.RemoteAddr().String())
 
-		log.V(-1).Info("Accepted Connection")
+		log.V(1).Info("Accepted Connection")
 
 		c := client.NewClient(r.Log.WithName("client"), r.broker, conn)
 		go func() {
@@ -72,4 +75,7 @@ func (r *Router) serverLoop() error {
 			}
 		}()
 	}
+
+	// TODO: wait for all clients to become idle (or timeout reached) then close brokers
+	return r.broker.Close()
 }

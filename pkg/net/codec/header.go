@@ -1,7 +1,5 @@
 package codec
 
-import "fmt"
-
 type RequestHeader struct {
 	Key           int16
 	Version       int16
@@ -26,8 +24,6 @@ func (h *RequestHeader) Decode(pd *RawDecoder) (err error) {
 		if h.ClientID, err = pd.NullableString(); err != nil {
 			return err
 		}
-
-		fmt.Printf("Client ID: %v\n", *h.ClientID)
 	}
 
 	// if h.Key == 18 || h.Version >= 2 {

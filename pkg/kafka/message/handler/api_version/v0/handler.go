@@ -1,6 +1,7 @@
 package v0
 
 import (
+	"github.com/go-logr/logr"
 	"github.com/rmb938/krouter/pkg/kafka/client"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/api_version"
 	apiVersionv0 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v0"
@@ -18,7 +19,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, message message.Message, correlationId int32) error {
+func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
 	_ = message.(*apiVersionv0.Request)
 
 	response := &apiVersionv0.Response{}
