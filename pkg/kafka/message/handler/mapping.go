@@ -5,6 +5,7 @@ import (
 	handlerFindCoordinatorV2 "github.com/rmb938/krouter/pkg/kafka/message/handler/find_coordinator/v2"
 	v1 "github.com/rmb938/krouter/pkg/kafka/message/handler/init_producer_id/v1"
 	handlerJoinGroupV4 "github.com/rmb938/krouter/pkg/kafka/message/handler/join_group/v4"
+	handlerLeaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/leave_group/v0"
 	v8 "github.com/rmb938/krouter/pkg/kafka/message/handler/metadata/v8"
 	handlerProduceV7 "github.com/rmb938/krouter/pkg/kafka/message/handler/produce/v7"
 	handlerSyncGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/sync_group/v0"
@@ -16,6 +17,8 @@ import (
 	initProducerIDV1 "github.com/rmb938/krouter/pkg/kafka/message/impl/init_producer_id/v1"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/join_group"
 	implJoinGroupV4 "github.com/rmb938/krouter/pkg/kafka/message/impl/join_group/v4"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group"
+	implLeaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
@@ -46,5 +49,8 @@ var MessageHandlerMapping = map[int16]map[int16]handler.MessageHandler{
 	},
 	sync_group.Key: {
 		implSyncGroupV0.Version: &handlerSyncGroupV0.Handler{},
+	},
+	leave_group.Key: {
+		implLeaveGroupV0.Version: &handlerLeaveGroupV0.Handler{},
 	},
 }

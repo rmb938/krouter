@@ -13,6 +13,8 @@ import (
 	initProducerIDv1 "github.com/rmb938/krouter/pkg/kafka/message/impl/init_producer_id/v1"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/join_group"
 	implJoinGroupV4 "github.com/rmb938/krouter/pkg/kafka/message/impl/join_group/v4"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group"
+	implLeaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
@@ -66,6 +68,11 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			Key:        sync_group.Key,
 			MinVersion: implSyncGroupV0.Version,
 			MaxVersion: implSyncGroupV0.Version,
+		},
+		apiVersionv0.APIKey{
+			Key:        leave_group.Key,
+			MinVersion: implLeaveGroupV0.Version,
+			MaxVersion: implLeaveGroupV0.Version,
 		},
 	)
 

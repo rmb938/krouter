@@ -8,6 +8,7 @@ import (
 	findCoordinatorV2 "github.com/rmb938/krouter/pkg/kafka/message/codec/find_coordinator/v2"
 	v1 "github.com/rmb938/krouter/pkg/kafka/message/codec/init_producer_id/v1"
 	joinGroupV4 "github.com/rmb938/krouter/pkg/kafka/message/codec/join_group/v4"
+	leaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/codec/leave_group/v0"
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/codec/metadata/v8"
 	producev7 "github.com/rmb938/krouter/pkg/kafka/message/codec/produce/v7"
 	syncGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/codec/sync_group/v0"
@@ -20,6 +21,8 @@ import (
 	initProducerIDV1 "github.com/rmb938/krouter/pkg/kafka/message/impl/init_producer_id/v1"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/join_group"
 	implJoinGroupV4 "github.com/rmb938/krouter/pkg/kafka/message/impl/join_group/v4"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group"
+	implLeaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
 	implMetadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
@@ -52,6 +55,9 @@ var MessageDecoderMapping = map[int16]map[int16]message.Decoder{
 	sync_group.Key: {
 		implSyncGroupV0.Version: &syncGroupV0.Decoder{},
 	},
+	leave_group.Key: {
+		implLeaveGroupV0.Version: &leaveGroupV0.Decoder{},
+	},
 }
 
 var MessageEncoderMapping = map[reflect.Type]message.Encoder{
@@ -63,4 +69,5 @@ var MessageEncoderMapping = map[reflect.Type]message.Encoder{
 	reflect.TypeOf(implFindCoordinatorV2.Response{}): &findCoordinatorV2.Encoder{},
 	reflect.TypeOf(implJoinGroupV4.Response{}):       &joinGroupV4.Encoder{},
 	reflect.TypeOf(implSyncGroupV0.Response{}):       &syncGroupV0.Encoder{},
+	reflect.TypeOf(implLeaveGroupV0.Response{}):      &leaveGroupV0.Encoder{},
 }

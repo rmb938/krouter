@@ -20,6 +20,8 @@ func (h *RequestHeader) Decode(pd *RawDecoder) (err error) {
 		return err
 	}
 
+	// TODO: this is only valid for head v1+
+	//  what happens when we get old clients?
 	if h.ClientID, err = pd.NullableString(); err != nil {
 		return err
 	}
