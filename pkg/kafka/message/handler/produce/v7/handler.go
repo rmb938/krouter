@@ -19,6 +19,7 @@ func (h *Handler) Handle(client *client.Client, message message.Message, correla
 
 	response := &v7.Response{}
 
+	// TODO: move this client to a central location
 	saramaConfig := sarama.NewConfig()
 	saramaConfig.Version = sarama.V2_6_0_0
 	kafkaClient, err := sarama.NewClient([]string{"localhost:9094"}, saramaConfig)
@@ -54,6 +55,7 @@ func (h *Handler) Handle(client *client.Client, message message.Message, correla
 
 				return fmt.Errorf("error finding kafka topic partition leader: %w", err)
 			}
+
 			kafkaProduceRequest := &sarama.ProduceRequest{
 				TransactionalID: request.TransactionalID,
 				RequiredAcks:    sarama.RequiredAcks(request.ACKs),
