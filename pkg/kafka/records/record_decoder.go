@@ -73,7 +73,7 @@ func (pd *RecordDecoder) ArrayLength() (int32, error) {
 	return pd.Int32()
 }
 
-func (pd *RecordDecoder) VarinBytes() ([]byte, error) {
+func (pd *RecordDecoder) VarIntBytes() ([]byte, error) {
 	length, err := pd.VarInt()
 	if err != nil {
 		return nil, err

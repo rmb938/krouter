@@ -84,3 +84,21 @@ func (c *Cluster) Produce(topic *topics.Topic, partition int32, request *sarama.
 
 	return broker.Produce(request)
 }
+
+func (c *Cluster) ListOffsets(topic *topics.Topic, partition int32, request *sarama.OffsetRequest) (*sarama.OffsetResponse, error) {
+	broker, err := c.kafkaClient.Leader(topic.Name, partition)
+	if err != nil {
+		return nil, err
+	}
+
+	return broker.GetAvailableOffsets(request)
+}
+
+func (c *Cluster) Fetch(topic *topics.Topic, partition int32, request *sarama.FetchRequest) (*sarama.FetchResponse, error) {
+	broker, err := c.kafkaClient.Leader(topic.Name, partition)
+	if err != nil {
+		return nil, err
+	}
+
+	return broker.Fetch(request)
+}

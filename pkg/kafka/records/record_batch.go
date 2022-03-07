@@ -1,9 +1,11 @@
 package records
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"time"
 
@@ -64,10 +66,11 @@ func ParseRecordBatch(recordBatchBytes []byte) (*RecordBatch, error) {
 		return nil, err
 	}
 
-	_, err = decoder.Int32()
+	length, err := decoder.Int32()
 	if err != nil {
 		return nil, err
 	}
+	_ = length // TODO: do we need to do anything with this?
 
 	rb.PartitionLeaderEpoch, err = decoder.Int32()
 	if err != nil {
@@ -82,10 +85,12 @@ func ParseRecordBatch(recordBatchBytes []byte) (*RecordBatch, error) {
 		return nil, UnsupportedMagic
 	}
 
-	_, err = decoder.Int32()
+	crc, err := decoder.Int32()
 	if err != nil {
 		return nil, err
 	}
+	_ = crc
+	// TODO: validate CRC somehow
 
 	rb.Attributes, err = decoder.Int16()
 	if err != nil {
@@ -146,10 +151,11 @@ func ParseRecordBatch(recordBatchBytes []byte) (*RecordBatch, error) {
 	for i := int32(0); i < recordCount; i++ {
 		record := &Record{}
 
-		_, err := recordDecoder.VarInt()
+		length, err := recordDecoder.VarInt()
 		if err != nil {
 			return nil, err
 		}
+		_ = length // TODO: do we need to do anything with this?
 
 		record.Attributes, err = recordDecoder.Int8()
 		if err != nil {
@@ -167,12 +173,12 @@ func ParseRecordBatch(recordBatchBytes []byte) (*RecordBatch, error) {
 			return nil, err
 		}
 
-		record.Key, err = recordDecoder.VarinBytes()
+		record.Key, err = recordDecoder.VarIntBytes()
 		if err != nil {
 			return nil, err
 		}
 
-		record.Value, err = recordDecoder.VarinBytes()
+		record.Value, err = recordDecoder.VarIntBytes()
 		if err != nil {
 			return nil, err
 		}
@@ -185,12 +191,12 @@ func ParseRecordBatch(recordBatchBytes []byte) (*RecordBatch, error) {
 		for i := int64(0); i < headerCount; i++ {
 			header := RecordHeader{}
 
-			header.Key, err = recordDecoder.VarinBytes()
+			header.Key, err = recordDecoder.VarIntBytes()
 			if err != nil {
 				return nil, err
 			}
 
-			header.Value, err = recordDecoder.VarinBytes()
+			header.Value, err = recordDecoder.VarIntBytes()
 			if err != nil {
 				return nil, err
 			}
@@ -258,4 +264,120 @@ func (rb *RecordBatch) decompress(data []byte) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("invalid compression specified: %d", rb.GetCodec())
 	}
+}
+
+func (rb *RecordBatch) Encode() ([]byte, error) {
+	encoder := RecordEncoder{Buff: bytes.NewBuffer([]byte{})}
+
+	encoder.Int16(rb.Attributes)
+
+	encoder.Int32(rb.LastOffsetDelta)
+
+	encoder.Int64(rb.FirstTimestamp.UnixMilli())
+
+	encoder.Int64(rb.MaxTimestamp.UnixMilli())
+
+	encoder.Int64(rb.ProducerID)
+
+	encoder.Int16(rb.ProducerEpoch)
+
+	encoder.Int32(rb.BaseSequence)
+
+	encoder.ArrayLength(len(rb.Records))
+
+	recordsEncoder := RecordEncoder{Buff: bytes.NewBuffer([]byte{})}
+
+	for _, record := range rb.Records {
+		recordEncoder := RecordEncoder{Buff: bytes.NewBuffer([]byte{})}
+
+		recordEncoder.Int8(record.Attributes)
+
+		recordEncoder.VarInt(int64(record.TimeStampDelta))
+
+		recordEncoder.VarInt(record.OffsetDelta)
+
+		recordEncoder.VarIntBytes(record.Key)
+
+		recordEncoder.VarIntBytes(record.Value)
+
+		recordEncoder.VarInt(int64(len(record.Headers)))
+		for _, header := range record.Headers {
+			recordEncoder.VarIntBytes(header.Key)
+			recordEncoder.VarIntBytes(header.Value)
+		}
+
+		recordHeaderEncoder := RecordEncoder{Buff: bytes.NewBuffer([]byte{})}
+		recordBytes := recordEncoder.ToBytes()
+		recordHeaderEncoder.VarInt(int64(len(recordBytes)))
+		recordHeaderEncoder.RawBytes(recordBytes)
+
+		recordsEncoder.RawBytes(recordHeaderEncoder.ToBytes())
+	}
+
+	compressedRecordBytes, err := rb.compress(recordsEncoder.ToBytes())
+	if err != nil {
+		return nil, err
+	}
+
+	encoder.RawBytes(compressedRecordBytes)
+
+	header2Encoder := RecordEncoder{Buff: bytes.NewBuffer([]byte{})}
+	header2Encoder.Int32(rb.PartitionLeaderEpoch)
+	header2Encoder.Int8(2) // hardcode magic to 2
+
+	encoderBytes := encoder.ToBytes()
+	header2Encoder.Int32(int32(crc32.Checksum(encoderBytes, crc32.MakeTable(crc32.Castagnoli))))
+	header2Encoder.RawBytes(encoderBytes)
+
+	header1Encoder := RecordEncoder{Buff: bytes.NewBuffer([]byte{})}
+	header1Encoder.Int64(rb.BaseOffset)
+
+	header2Bytes := header2Encoder.ToBytes()
+
+	header1Encoder.Int32(int32(len(header2Bytes)))
+	header1Encoder.RawBytes(header2Bytes)
+
+	return encoder.ToBytes(), nil
+}
+
+func (rb *RecordBatch) compress(data []byte) ([]byte, error) {
+	output := bytes.NewBuffer([]byte{})
+
+	switch rb.GetCodec() {
+	case CompressionNone:
+		return data, nil
+	case CompressionGZIP:
+		writer := gzip.NewWriter(bufio.NewWriter(bufio.NewWriter(output)))
+		defer writer.Close()
+
+		_, err := writer.Write(data)
+		if err != nil {
+			return nil, err
+		}
+	case CompressionSnappy:
+		return snappy.Encode(data), nil
+	case CompressionLZ4:
+		writer := lz4.NewWriter(bufio.NewWriter(output))
+		defer writer.Close()
+
+		_, err := writer.Write(data)
+		if err != nil {
+			return nil, err
+		}
+	case CompressionZSTD:
+		zstdEnc, err := zstd.NewWriter(nil, zstd.WithZeroFrames(true), zstd.WithEncoderLevel(zstd.SpeedDefault))
+		if err != nil {
+			return nil, err
+		}
+		defer zstdEnc.Close()
+
+		_, err = zstdEnc.Write(data)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("invalid compression specified: %d", rb.GetCodec())
+	}
+
+	return output.Bytes(), nil
 }
