@@ -266,6 +266,20 @@ func (rb *RecordBatch) decompress(data []byte) ([]byte, error) {
 	}
 }
 
+func ComputeAttributes(codec int16, control, logAppendTime, isTransactional bool) int16 {
+	attr := codec & int16(compressionCodecMask)
+	if control {
+		attr |= controlMask
+	}
+	if logAppendTime {
+		attr |= timestampTypeMask
+	}
+	if isTransactional {
+		attr |= isTransactionalMask
+	}
+	return attr
+}
+
 func (rb *RecordBatch) Encode() ([]byte, error) {
 	encoder := RecordEncoder{Buff: bytes.NewBuffer([]byte{})}
 
@@ -337,7 +351,7 @@ func (rb *RecordBatch) Encode() ([]byte, error) {
 	header1Encoder.Int32(int32(len(header2Bytes)))
 	header1Encoder.RawBytes(header2Bytes)
 
-	return encoder.ToBytes(), nil
+	return header1Encoder.ToBytes(), nil
 }
 
 func (rb *RecordBatch) compress(data []byte) ([]byte, error) {

@@ -1,7 +1,7 @@
-package v5
+package v4
 
 import (
-	v5 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch/v5"
+	v4 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch/v4"
 	"github.com/rmb938/krouter/pkg/net/codec"
 	"github.com/rmb938/krouter/pkg/net/message"
 )
@@ -11,7 +11,7 @@ type Decoder struct {
 
 func (d *Decoder) Decode(reader *codec.PackerReader) (message.Message, error) {
 
-	msg := &v5.Request{}
+	msg := &v4.Request{}
 
 	var err error
 	if msg.GroupID, err = reader.String(); err != nil {
@@ -24,7 +24,7 @@ func (d *Decoder) Decode(reader *codec.PackerReader) (message.Message, error) {
 	}
 
 	for i := int32(0); i < topicsLength; i++ {
-		offsetFetchTopic := v5.RequestOffsetFetchTopic{}
+		offsetFetchTopic := v4.RequestOffsetFetchTopic{}
 
 		if offsetFetchTopic.Name, err = reader.String(); err != nil {
 			return nil, err

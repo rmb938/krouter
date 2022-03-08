@@ -1,10 +1,8 @@
-package v5
+package v4
 
 import (
-	"time"
-
-	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
-	v5 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch/v5"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/find_coordinator"
+	v4 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_commit/v4"
 	"github.com/rmb938/krouter/pkg/net/codec"
 	"github.com/rmb938/krouter/pkg/net/message"
 )
@@ -13,12 +11,12 @@ type Encoder struct {
 }
 
 func (e *Encoder) Encode(message message.Message) (*codec.Packet, error) {
-	msg := message.(*v5.Response)
+	msg := message.(*v4.Response)
 
-	builder := codec.NewPacketBuilder(metadata.Key, msg.Version())
+	builder := codec.NewPacketBuilder(find_coordinator.Key, msg.Version())
 
 	// throttle_time_ms
-	builder.Encoder.Int32(int32(msg.ThrottleDuration / time.Millisecond))
+	builder.Encoder.Int32(int32(msg.ThrottleDuration))
 
 	// topics
 	builder.Encoder.ArrayLength(len(msg.Topics))
@@ -32,22 +30,10 @@ func (e *Encoder) Encode(message message.Message) (*codec.Packet, error) {
 			// partition_index
 			builder.Encoder.Int32(partition.PartitionIndex)
 
-			// committed_offset
-			builder.Encoder.Int64(partition.CommittedOffset)
-
-			// committed_leader_epoch
-			builder.Encoder.Int32(partition.CommittedLeaderEpoch)
-
-			// metadata
-			builder.Encoder.NullableString(partition.Metadata)
-
 			// error_code
 			builder.Encoder.Int16(int16(partition.ErrCode))
 		}
 	}
-
-	// error_code
-	builder.Encoder.Int16(int16(msg.ErrCode))
 
 	return builder.ToPacket(), nil
 }

@@ -66,7 +66,7 @@ func (pp *PacketProcessor) processPacket(client *client.Client) error {
 
 	inHandler, ok := handlerMap[inPacket.ReqHeader.Version]
 	if !ok {
-		return fmt.Errorf("no handler for packet version: %d", inPacket.ReqHeader.Version)
+		return fmt.Errorf("no handler for packet %d version: %d", inPacket.ReqHeader.Key, inPacket.ReqHeader.Version)
 	}
 
 	log.V(1).Info("decoding packet")

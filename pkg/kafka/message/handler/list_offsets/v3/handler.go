@@ -16,7 +16,7 @@ type Handler struct {
 }
 
 func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
-	log = log.WithName("leave-group-v0-handler")
+	log = log.WithName("list-offsets-v3-handler")
 	request := message.(*v3.Request)
 
 	response := &v3.Response{}

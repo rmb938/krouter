@@ -1,4 +1,4 @@
-package v0
+package v2
 
 import (
 	"github.com/go-logr/logr"
@@ -23,8 +23,6 @@ import (
 	implListOffsetsV3 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v3"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
-	"github.com/rmb938/krouter/pkg/kafka/message/impl/offset_commit"
-	implOffsetCommitV4 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_commit/v4"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch"
 	implOffsetFetchv4 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch/v4"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
@@ -38,76 +36,71 @@ type Handler struct {
 }
 
 func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
-	_ = message.(*apiVersionv0.Request)
+	_ = message.(*apiVersionv2.Request)
 
-	response := &apiVersionv0.Response{}
+	response := &apiVersionv2.Response{}
 
 	response.ErrCode = errors.None
 	response.APIKeys = append(response.APIKeys,
-		apiVersionv0.APIKey{
+		apiVersionv2.APIKey{
 			Key:        produce.Key,
 			MinVersion: producev7.Version,
 			MaxVersion: producev7.Version,
 		},
-		apiVersionv0.APIKey{
+		apiVersionv2.APIKey{
 			Key:        metadata.Key,
 			MinVersion: metadatav8.Version,
 			MaxVersion: metadatav8.Version,
 		},
-		apiVersionv0.APIKey{
+		apiVersionv2.APIKey{
 			Key:        api_version.Key,
 			MinVersion: apiVersionv0.Version,
 			MaxVersion: apiVersionv2.Version,
 		},
-		apiVersionv0.APIKey{
+		apiVersionv2.APIKey{
 			Key:        init_producer_id.Key,
 			MinVersion: initProducerIDv1.Version,
 			MaxVersion: initProducerIDv1.Version,
 		},
-		apiVersionv0.APIKey{
+		apiVersionv2.APIKey{
 			Key:        find_coordinator.Key,
 			MinVersion: implFindCoordinatorV2.Version,
 			MaxVersion: implFindCoordinatorV2.Version,
 		},
-		apiVersionv0.APIKey{
+		apiVersionv2.APIKey{
 			Key:        join_group.Key,
 			MinVersion: implJoinGroupV4.Version,
 			MaxVersion: implJoinGroupV4.Version,
 		},
-		apiVersionv0.APIKey{
+		apiVersionv2.APIKey{
 			Key:        sync_group.Key,
 			MinVersion: implSyncGroupV0.Version,
 			MaxVersion: implSyncGroupV0.Version,
 		},
-		apiVersionv0.APIKey{
+		apiVersionv2.APIKey{
 			Key:        leave_group.Key,
 			MinVersion: implLeaveGroupV0.Version,
 			MaxVersion: implLeaveGroupV0.Version,
 		},
-		apiVersionv0.APIKey{
+		apiVersionv2.APIKey{
 			Key:        offset_fetch.Key,
 			MinVersion: implOffsetFetchv4.Version,
 			MaxVersion: implOffsetFetchv4.Version,
 		},
-		apiVersionv0.APIKey{
+		apiVersionv2.APIKey{
 			Key:        list_offsets.Key,
 			MinVersion: implListOffsetsV3.Version,
 			MaxVersion: implListOffsetsV3.Version,
 		},
-		apiVersionv0.APIKey{
+		apiVersionv2.APIKey{
 			Key:        fetch.Key,
 			MinVersion: implFetchV11.Version,
 			MaxVersion: implFetchV11.Version,
 		},
-		apiVersionv0.APIKey{
+		apiVersionv2.APIKey{
 			Key:        heartbeat.Key,
 			MinVersion: implHeartbeatV0.Version,
 			MaxVersion: implHeartbeatV0.Version,
-		},
-		apiVersionv0.APIKey{
-			Key:        offset_commit.Key,
-			MinVersion: implOffsetCommitV4.Version,
-			MaxVersion: implOffsetCommitV4.Version,
 		},
 	)
 

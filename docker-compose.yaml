@@ -4,6 +4,7 @@ networks:
     driver: bridge
 
 volumes:
+  redis:
   zookeeperController:
   zookeeper1:
   zookeeper2:
@@ -14,6 +15,20 @@ volumes:
   kafka3:
 
 services:
+  redis:
+    image: bitnami/redis:6.2
+    container_name: redis
+    environment:
+      - REDIS_AOF_ENABLED=yes
+      - REDIS_APPENDFSYNC=everysec
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis:/bitnami/redis/data
+    networks:
+      - kafka-cluster
+
   zookeeperController:
     image: bitnami/zookeeper:3.6.2
     container_name: zookeeperController

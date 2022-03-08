@@ -15,7 +15,7 @@ type Handler struct {
 }
 
 func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
-	log = log.WithName("join-group-v4-handler")
+	log = log.WithName("sync-group-v0-handler")
 
 	request := message.(*v0.Request)
 
@@ -40,7 +40,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		if kafkaError, ok := err.(sarama.KError); ok {
 			response.ErrCode = errors.KafkaError(kafkaError)
 		} else {
-			return fmt.Errorf("error syncing group to backend cluster: %w", err)
+			return fmt.Errorf("error syncing group to controller: %w", err)
 		}
 	}
 

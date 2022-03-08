@@ -1,4 +1,4 @@
-package v5
+package v4
 
 import (
 	"time"
@@ -7,11 +7,10 @@ import (
 )
 
 type ResponseOffsetFetchTopicPartition struct {
-	PartitionIndex       int32
-	CommittedOffset      int64
-	CommittedLeaderEpoch int32
-	Metadata             *string
-	ErrCode              errors.KafkaError
+	PartitionIndex  int32
+	CommittedOffset int64
+	Metadata        *string
+	ErrCode         errors.KafkaError
 }
 
 type ResponseOffsetFetchTopic struct {

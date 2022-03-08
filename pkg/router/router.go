@@ -19,7 +19,7 @@ type Router struct {
 	broker *logical_broker.Broker
 }
 
-func (r *Router) ListenAndServe(listener, advertiseListener *net.TCPAddr, clusterID string) error {
+func (r *Router) ListenAndServe(listener, advertiseListener *net.TCPAddr, clusterID string, redisAddresses []string) error {
 	r.Log.Info("Starting Router")
 
 	r.packetProcessor = &PacketProcessor{
@@ -33,7 +33,7 @@ func (r *Router) ListenAndServe(listener, advertiseListener *net.TCPAddr, cluste
 	}
 	defer r.listener.Close()
 
-	r.broker, err = logical_broker.InitBroker(r.Log, advertiseListener, clusterID)
+	r.broker, err = logical_broker.InitBroker(r.Log, advertiseListener, clusterID, redisAddresses)
 	if err != nil {
 		return err
 	}

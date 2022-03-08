@@ -120,3 +120,11 @@ func (pe *RawEncoder) CompactNullableString(in *string) {
 func (pe *RawEncoder) ToBytes() []byte {
 	return pe.Buff.Bytes()
 }
+
+func (pe *RawEncoder) Records(in []byte) {
+	pe.NullableBytes(in)
+}
+
+func (pe *RawEncoder) CompactRecords(in []byte) {
+	pe.CompactNullableBytes(in)
+}

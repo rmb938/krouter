@@ -2,19 +2,28 @@ package handler
 
 import (
 	v0 "github.com/rmb938/krouter/pkg/kafka/message/handler/api_version/v0"
+	v2 "github.com/rmb938/krouter/pkg/kafka/message/handler/api_version/v2"
+	handlerFetchV11 "github.com/rmb938/krouter/pkg/kafka/message/handler/fetch/v11"
 	handlerFindCoordinatorV2 "github.com/rmb938/krouter/pkg/kafka/message/handler/find_coordinator/v2"
+	handlerHearbeatV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/heartbeat/v0"
 	v1 "github.com/rmb938/krouter/pkg/kafka/message/handler/init_producer_id/v1"
 	handlerJoinGroupV4 "github.com/rmb938/krouter/pkg/kafka/message/handler/join_group/v4"
 	handlerLeaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/leave_group/v0"
 	handlerListOffsetsV3 "github.com/rmb938/krouter/pkg/kafka/message/handler/list_offsets/v3"
 	v8 "github.com/rmb938/krouter/pkg/kafka/message/handler/metadata/v8"
-	handlerOffsetFetchV5 "github.com/rmb938/krouter/pkg/kafka/message/handler/offset_fetch/v5"
+	handlerOffsetCommitV4 "github.com/rmb938/krouter/pkg/kafka/message/handler/offset_commit/v4"
+	handlerOffsetFetchV4 "github.com/rmb938/krouter/pkg/kafka/message/handler/offset_fetch/v4"
 	handlerProduceV7 "github.com/rmb938/krouter/pkg/kafka/message/handler/produce/v7"
 	handlerSyncGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/sync_group/v0"
 	implAPIVersion "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version"
 	implAPIVersionV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v0"
+	implAPIVersionV2 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v2"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/fetch"
+	implFetchV11 "github.com/rmb938/krouter/pkg/kafka/message/impl/fetch/v11"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/find_coordinator"
 	implFindCoordinatorV2 "github.com/rmb938/krouter/pkg/kafka/message/impl/find_coordinator/v2"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/heartbeat"
+	implHeartbeatV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/heartbeat/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/init_producer_id"
 	initProducerIDV1 "github.com/rmb938/krouter/pkg/kafka/message/impl/init_producer_id/v1"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/join_group"
@@ -25,8 +34,10 @@ import (
 	implListOffsetsV3 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v3"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/offset_commit"
+	implOffsetCommitV4 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_commit/v4"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch"
-	implOffsetFetchv5 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch/v5"
+	implOffsetFetchv4 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch/v4"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
 	producev7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group"
@@ -37,6 +48,7 @@ import (
 var MessageHandlerMapping = map[int16]map[int16]handler.MessageHandler{
 	implAPIVersion.Key: {
 		implAPIVersionV0.Version: &v0.Handler{},
+		implAPIVersionV2.Version: &v2.Handler{},
 	},
 	metadata.Key: {
 		metadatav8.Version: &v8.Handler{},
@@ -60,9 +72,18 @@ var MessageHandlerMapping = map[int16]map[int16]handler.MessageHandler{
 		implLeaveGroupV0.Version: &handlerLeaveGroupV0.Handler{},
 	},
 	offset_fetch.Key: {
-		implOffsetFetchv5.Version: &handlerOffsetFetchV5.Handler{},
+		implOffsetFetchv4.Version: &handlerOffsetFetchV4.Handler{},
 	},
 	list_offsets.Key: {
 		implListOffsetsV3.Version: &handlerListOffsetsV3.Handler{},
+	},
+	fetch.Key: {
+		implFetchV11.Version: &handlerFetchV11.Handler{},
+	},
+	heartbeat.Key: {
+		implHeartbeatV0.Version: &handlerHearbeatV0.Handler{},
+	},
+	offset_commit.Key: {
+		implOffsetCommitV4.Version: &handlerOffsetCommitV4.Handler{},
 	},
 }

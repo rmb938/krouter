@@ -49,6 +49,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 					metadatav8.Partitions{
 						Index:           i,
 						LeaderID:        1,
+						LeaderEpoch:     0, // TODO: this?
 						ReplicaNodes:    []int32{1},
 						ISRNodes:        []int32{1},
 						OfflineReplicas: []int32{},

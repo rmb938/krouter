@@ -18,20 +18,23 @@ type Broker struct {
 
 	ephemeralID string
 
+	redisAddresses []string
+
 	controller *Controller
 	clusters   map[string]*Cluster
 }
 
-func InitBroker(log logr.Logger, advertiseListener *net.TCPAddr, clusterID string) (*Broker, error) {
+func InitBroker(log logr.Logger, advertiseListener *net.TCPAddr, clusterID string, redisAddresses []string) (*Broker, error) {
 	log = log.WithName("broker")
 
 	broker := &Broker{
 		AdvertiseListener: advertiseListener,
 		ClusterID:         clusterID,
 
-		log:         log,
-		ephemeralID: uuid.Must(uuid.NewRandom()).String(),
-		clusters:    map[string]*Cluster{},
+		log:            log,
+		ephemeralID:    uuid.Must(uuid.NewRandom()).String(),
+		redisAddresses: redisAddresses,
+		clusters:       map[string]*Cluster{},
 	}
 
 	return broker, nil
@@ -73,7 +76,7 @@ func (b *Broker) InitClusters() error {
 		return err
 	}
 
-	b.controller, err = NewController(b.log, cluster)
+	b.controller, err = NewController(b.log, cluster, b.redisAddresses)
 	if err != nil {
 		return err
 	}

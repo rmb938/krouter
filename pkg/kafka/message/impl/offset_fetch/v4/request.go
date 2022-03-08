@@ -1,4 +1,4 @@
-package v5
+package v4
 
 type RequestOffsetFetchTopic struct {
 	Name             string

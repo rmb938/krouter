@@ -50,7 +50,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		if kafkaError, ok := err.(sarama.KError); ok {
 			response.ErrCode = errors.KafkaError(kafkaError)
 		} else {
-			return fmt.Errorf("error joining group to backend cluster: %w", err)
+			return fmt.Errorf("error joining group to controller: %w", err)
 		}
 	}
 
