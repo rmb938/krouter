@@ -62,5 +62,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		response.Topics = append(response.Topics, responseTopic)
 	}
 
+	// TODO if len(request.Topics) is 0 return all topics
+
 	return client.WriteMessage(response, correlationId)
 }

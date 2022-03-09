@@ -29,6 +29,12 @@ func NewCluster(name string, addrs []string, log logr.Logger) (*Cluster, error) 
 	saramaConfig := sarama.NewConfig()
 	saramaConfig.Version = sarama.V2_6_0_0
 
+	// TODO: if the brokers we are connected to restart we get a broken pipe error
+	// {"level":"error","ts":1646785492.4811382,"logger":"router.packet-processor.describe-groups-v0-handler","msg":"Error describing group to controller","from-address":"127.0.0.1:43656","group":"same-group1","error":"write tcp [::1]:45220->[::1]:19093: write: broken pipe"}
+	// {"level":"error","ts":1646785492.481163,"logger":"router","msg":"error processing packet","from-address":"127.0.0.1:43656","error":"error handling packet: error describing group to controller: write tcp [::1]:45220->[::1]:19093: write: broken pipe"}
+	// TODO: we need to come up with a way to check the connection and re-open it if needed
+	//  it eventually fixes itself but we can't tolerate these
+
 	var err error
 	cluster.kafkaClient, err = sarama.NewClient(addrs, saramaConfig)
 	if err != nil {

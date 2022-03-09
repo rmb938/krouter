@@ -6,6 +6,8 @@ import (
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/api_version"
 	apiVersionv0 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v0"
 	apiVersionv2 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v2"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/describe_groups"
+	implDescribeGroupsV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_groups/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/fetch"
 	implFetchV11 "github.com/rmb938/krouter/pkg/kafka/message/impl/fetch/v11"
@@ -101,6 +103,11 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			Key:        heartbeat.Key,
 			MinVersion: implHeartbeatV0.Version,
 			MaxVersion: implHeartbeatV0.Version,
+		},
+		apiVersionv2.APIKey{
+			Key:        describe_groups.Key,
+			MinVersion: implDescribeGroupsV0.Version,
+			MaxVersion: implDescribeGroupsV0.Version,
 		},
 	)
 

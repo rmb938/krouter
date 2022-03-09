@@ -3,6 +3,7 @@ package handler
 import (
 	v0 "github.com/rmb938/krouter/pkg/kafka/message/handler/api_version/v0"
 	v2 "github.com/rmb938/krouter/pkg/kafka/message/handler/api_version/v2"
+	handlerDescribeGroupsV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/describe_groups/v0"
 	handlerFetchV11 "github.com/rmb938/krouter/pkg/kafka/message/handler/fetch/v11"
 	handlerFindCoordinatorV2 "github.com/rmb938/krouter/pkg/kafka/message/handler/find_coordinator/v2"
 	handlerHearbeatV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/heartbeat/v0"
@@ -18,6 +19,8 @@ import (
 	implAPIVersion "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version"
 	implAPIVersionV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v0"
 	implAPIVersionV2 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v2"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/describe_groups"
+	implDescribeGroupsV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_groups/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/fetch"
 	implFetchV11 "github.com/rmb938/krouter/pkg/kafka/message/impl/fetch/v11"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/find_coordinator"
@@ -85,5 +88,8 @@ var MessageHandlerMapping = map[int16]map[int16]handler.MessageHandler{
 	},
 	offset_commit.Key: {
 		implOffsetCommitV4.Version: &handlerOffsetCommitV4.Handler{},
+	},
+	describe_groups.Key: {
+		implDescribeGroupsV0.Version: &handlerDescribeGroupsV0.Handler{},
 	},
 }

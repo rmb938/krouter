@@ -71,5 +71,30 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		response.Topics = append(response.Topics, offsetFetchTopic)
 	}
 
+	if len(request.Topics) == 0 {
+		offsets, err := client.Broker.GetController().OffsetFetchAllTopics(request.GroupID)
+		if err != nil {
+			log.Error(err, "error fetching offsets for all topics to controller")
+			return fmt.Errorf("error fetching offsets for all topics to controller: %w", err)
+		}
+
+		for topicName, partitionInfo := range offsets {
+			offsetFetchTopic := v4.ResponseOffsetFetchTopic{
+				Name: topicName,
+			}
+
+			for partitionIndex, offset := range partitionInfo {
+				offsetFetchTopic.Partitions = append(offsetFetchTopic.Partitions, v4.ResponseOffsetFetchTopicPartition{
+					PartitionIndex:  partitionIndex,
+					CommittedOffset: offset,
+					Metadata:        nil,
+					ErrCode:         errors.None,
+				})
+			}
+
+			response.Topics = append(response.Topics, offsetFetchTopic)
+		}
+	}
+
 	return client.WriteMessage(response, correlationId)
 }

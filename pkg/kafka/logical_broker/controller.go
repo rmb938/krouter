@@ -2,7 +2,10 @@ package logical_broker
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -131,11 +134,15 @@ func (c *Controller) HeartBeat(request *sarama.HeartbeatRequest) (*sarama.Heartb
 	return response, err
 }
 
+func (c *Controller) base64Topic(topic string) string {
+	return base64.StdEncoding.EncodeToString([]byte(topic))
+}
+
 func (c *Controller) OffsetFetch(group, topic string, partition int32) (int64, error) {
 	redisContext, redisContextCancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer redisContextCancel()
 
-	redisGroupOffsetKey := fmt.Sprintf("{group-%s}-offset-topic-%s-partition-%d", group, topic, partition)
+	redisGroupOffsetKey := fmt.Sprintf("{group-%s}-offset-topic-%s-partition-%d", group, c.base64Topic(topic), partition)
 
 	var offset int64
 	err := c.redisClient.Watch(redisContext, func(tx *redis.Tx) error {
@@ -152,6 +159,54 @@ func (c *Controller) OffsetFetch(group, topic string, partition int32) (int64, e
 	return offset, err
 }
 
+func (c *Controller) OffsetFetchAllTopics(group string) (map[string]map[int32]int64, error) {
+	offsets := make(map[string]map[int32]int64)
+
+	redisContext, redisContextCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer redisContextCancel()
+
+	redisGroupOffsetKeyPrefix := fmt.Sprintf("{group-%s}-offset-topic-", group)
+
+	err := c.redisClient.Watch(redisContext, func(tx *redis.Tx) error {
+		scan := tx.Scan(redisContext, 0, fmt.Sprintf("%s*", redisGroupOffsetKeyPrefix), 0).Iterator()
+
+		for scan.Next(redisContext) {
+			key := scan.Val()
+			offset, err := tx.Get(redisContext, key).Int64()
+
+			if err == redis.Nil {
+				continue
+			}
+
+			if err != nil {
+				return err
+			}
+
+			topicParts := strings.Split(strings.TrimPrefix(key, redisGroupOffsetKeyPrefix), "-partition-")
+
+			topicByte, err := base64.StdEncoding.DecodeString(topicParts[0])
+			if err != nil {
+				return fmt.Errorf("err decoding base64 topic name: %s: %w", topicParts[0], err)
+			}
+			topic := string(topicByte)
+
+			partition, err := strconv.Atoi(topicParts[1])
+			if err != nil {
+				return err
+			}
+
+			if offsets[topic] == nil {
+				offsets[topic] = make(map[int32]int64)
+			}
+			offsets[topic][int32(partition)] = offset
+		}
+
+		return nil
+	})
+
+	return offsets, err
+}
+
 func (c *Controller) OffsetCommit(group, topic string, groupGenerationId, partition int32, offset int64) error {
 	// TODO: to expire these, every 5 minutes do a `SCAN MATCH group-offset-*` and see if a generation exists, if it doesn't delete it
 
@@ -159,7 +214,7 @@ func (c *Controller) OffsetCommit(group, topic string, groupGenerationId, partit
 	defer redisContextCancel()
 
 	redisGroupGenerationKey := fmt.Sprintf("{group-%s}-generation", group)
-	redisGroupOffsetKey := fmt.Sprintf("{group-%s}-offset-topic-%s-partition-%d", group, topic, partition)
+	redisGroupOffsetKey := fmt.Sprintf("{group-%s}-offset-topic-%s-partition-%d", group, c.base64Topic(topic), partition)
 
 	err := c.redisClient.Watch(redisContext, func(tx *redis.Tx) error {
 		generationId, err := tx.Get(redisContext, redisGroupGenerationKey).Int64()
@@ -175,4 +230,13 @@ func (c *Controller) OffsetCommit(group, topic string, groupGenerationId, partit
 	}, redisGroupGenerationKey)
 
 	return err
+}
+
+func (c *Controller) DescribeGroup(group string) (*sarama.DescribeGroupsResponse, error) {
+	coordinatorBroker, err := c.findCoordinator(group)
+	if err != nil {
+		return nil, err
+	}
+
+	return coordinatorBroker.DescribeGroups(&sarama.DescribeGroupsRequest{Groups: []string{group}})
 }
