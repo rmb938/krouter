@@ -2,6 +2,7 @@ package v7
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/Shopify/sarama"
 	"github.com/go-logr/logr"
@@ -20,16 +21,6 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 	request := message.(*v7.Request)
 
 	response := &v7.Response{}
-
-	// TODO: move this client to a central location
-	saramaConfig := sarama.NewConfig()
-	saramaConfig.Version = sarama.V2_6_0_0
-	kafkaClient, err := sarama.NewClient([]string{"localhost:9094"}, saramaConfig)
-	if err != nil {
-		return fmt.Errorf("error creating sarama client: %w", err)
-	}
-
-	defer kafkaClient.Close()
 
 	for _, topicData := range request.TopicData {
 		log = log.WithValues("topic", topicData.Name)
@@ -93,25 +84,33 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 				FirstSequence:        rb.BaseSequence,
 				IsTransactional:      rb.IsTransactional(),
 			}
+			kafkaRb.Records = make([]*sarama.Record, len(rb.Records))
 
-			for _, r := range rb.Records {
-				kafkaRecord := &sarama.Record{
-					Attributes:     r.Attributes,
-					TimestampDelta: r.TimeStampDelta,
-					OffsetDelta:    r.OffsetDelta,
-					Key:            r.Key,
-					Value:          r.Value,
-				}
+			var recordsWG sync.WaitGroup
+			for index, r := range rb.Records {
+				recordsWG.Add(1)
+				go func(index int, r *records.Record) {
+					kafkaRecord := &sarama.Record{
+						Attributes:     r.Attributes,
+						TimestampDelta: r.TimeStampDelta,
+						OffsetDelta:    r.OffsetDelta,
+						Key:            r.Key,
+						Value:          r.Value,
+					}
 
-				for _, rHeader := range r.Headers {
-					kafkaRecord.Headers = append(kafkaRecord.Headers, &sarama.RecordHeader{
-						Key:   rHeader.Key,
-						Value: rHeader.Value,
-					})
-				}
+					for _, rHeader := range r.Headers {
+						kafkaRecord.Headers = append(kafkaRecord.Headers, &sarama.RecordHeader{
+							Key:   rHeader.Key,
+							Value: rHeader.Value,
+						})
+					}
 
-				kafkaRb.Records = append(kafkaRb.Records, kafkaRecord)
+					kafkaRb.Records[index] = kafkaRecord
+					recordsWG.Done()
+				}(index, r)
 			}
+
+			recordsWG.Wait()
 
 			kafkaProduceRequest.AddBatch(topicData.Name, partitionData.Index, kafkaRb)
 
