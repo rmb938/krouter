@@ -5,6 +5,7 @@ import (
 
 	v0 "github.com/rmb938/krouter/pkg/kafka/message/codec/api_version/v0"
 	v2 "github.com/rmb938/krouter/pkg/kafka/message/codec/api_version/v2"
+	describeConfigsV0 "github.com/rmb938/krouter/pkg/kafka/message/codec/describe_configs/v0"
 	describeGroupsV0 "github.com/rmb938/krouter/pkg/kafka/message/codec/describe_groups/v0"
 	fetchV11 "github.com/rmb938/krouter/pkg/kafka/message/codec/fetch/v11"
 	findCoordinatorV2 "github.com/rmb938/krouter/pkg/kafka/message/codec/find_coordinator/v2"
@@ -21,6 +22,8 @@ import (
 	implAPIVersion "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version"
 	implAPIVersionV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v0"
 	implAPIVersionV2 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v2"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/describe_configs"
+	implDescribeConfigsV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_configs/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/describe_groups"
 	implDescribeGroupsV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_groups/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/fetch"
@@ -94,6 +97,9 @@ var MessageDecoderMapping = map[int16]map[int16]message.Decoder{
 	describe_groups.Key: {
 		implDescribeGroupsV0.Version: &describeGroupsV0.Decoder{},
 	},
+	describe_configs.Key: {
+		implDescribeConfigsV0.Version: &describeConfigsV0.Decoder{},
+	},
 }
 
 var MessageEncoderMapping = map[reflect.Type]message.Encoder{
@@ -112,4 +118,5 @@ var MessageEncoderMapping = map[reflect.Type]message.Encoder{
 	reflect.TypeOf(implHeartbeatV0.Response{}):       &heartbeatV0.Encoder{},
 	reflect.TypeOf(implOffsetCommitV4.Response{}):    &offsetCommitV4.Encoder{},
 	reflect.TypeOf(implDescribeGroupsV0.Response{}):  &describeGroupsV0.Encoder{},
+	reflect.TypeOf(implDescribeConfigsV0.Response{}): &describeConfigsV0.Encoder{},
 }

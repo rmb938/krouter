@@ -31,7 +31,16 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 	response.ClusterID = &client.Broker.ClusterID
 	response.ControllerID = 1
 
-	for _, topicName := range request.Topics {
+	topicNames := request.Topics
+
+	// if requested topics is empty return all topics
+	if len(topicNames) == 0 {
+		for _, topic := range client.Broker.GetTopics() {
+			topicNames = append(topicNames, topic.Name)
+		}
+	}
+
+	for _, topicName := range topicNames {
 		log = log.WithValues("topic", topicName)
 
 		responseTopic := metadatav8.Topics{
@@ -56,13 +65,11 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 					})
 			}
 		} else {
-			log.V(1).Info("Client tried to get metadata for a topic that doesn't exist")
+			log.Error(nil, "Client tried to get metadata for a topic that doesn't exist")
 		}
 
 		response.Topics = append(response.Topics, responseTopic)
 	}
-
-	// TODO if len(request.Topics) is 0 return all topics
 
 	return client.WriteMessage(response, correlationId)
 }

@@ -217,13 +217,16 @@ func (c *Controller) OffsetCommit(group, topic string, groupGenerationId, partit
 	redisGroupOffsetKey := fmt.Sprintf("{group-%s}-offset-topic-%s-partition-%d", group, c.base64Topic(topic), partition)
 
 	err := c.redisClient.Watch(redisContext, func(tx *redis.Tx) error {
-		generationId, err := tx.Get(redisContext, redisGroupGenerationKey).Int64()
-		if err != nil && err != redis.Nil {
-			return err
-		}
+		// generation will be -1 when we are resetting offsets
+		if groupGenerationId != -1 {
+			generationId, err := tx.Get(redisContext, redisGroupGenerationKey).Int64()
+			if err != nil && err != redis.Nil {
+				return err
+			}
 
-		if err == redis.Nil || generationId != int64(groupGenerationId) {
-			return sarama.KError(errors.IllegalGeneration)
+			if err == redis.Nil || generationId != int64(groupGenerationId) {
+				return sarama.KError(errors.IllegalGeneration)
+			}
 		}
 
 		return tx.Set(redisContext, redisGroupOffsetKey, offset, 0).Err()
