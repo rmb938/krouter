@@ -81,7 +81,7 @@ func (pp *PacketProcessor) processPacket(client *client.Client) error {
 
 	// TODO: figure out throttling stuff
 	log.V(1).Info("handling packet")
-	err = inHandler.Handle(client, pp.Log.WithValues("from-address", client.RemoteAddr().String()), message, inPacket.ReqHeader.CorrelationId)
+	err = inHandler.Handle(client, log, message, inPacket.ReqHeader.CorrelationId)
 	if err != nil {
 		return fmt.Errorf("error handling packet: %w", err)
 	}

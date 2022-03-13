@@ -21,6 +21,6 @@ func (builder *PacketBuilder) ToPacket() *Packet {
 		ReqHeader: nil,
 		Key:       &builder.key,
 		Version:   &builder.version,
-		Data:      builder.Encoder.ToBytes(),
+		Data:      builder.Encoder.Buff,
 	}
 }

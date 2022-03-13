@@ -61,6 +61,10 @@ func (pe *RawEncoder) CompactArrayLength(in int) {
 	pe.UVarInt(uint64(in + 1))
 }
 
+func (pe *RawEncoder) RawBytes(in []byte) {
+	pe.Buff.Write(in)
+}
+
 func (pe *RawEncoder) Bytes(in []byte) {
 	pe.ArrayLength(len(in))
 	pe.Buff.Write(in)

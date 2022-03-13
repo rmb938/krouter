@@ -15,50 +15,17 @@ import (
 )
 
 type Controller struct {
-	redisClient redis.UniversalClient
-	cluster     *Cluster
+	cluster *Cluster
 }
 
-func NewController(log logr.Logger, cluster *Cluster, redisAddresses []string) (*Controller, error) {
+func NewController(log logr.Logger, cluster *Cluster) (*Controller, error) {
 	log = log.WithName("controller")
 
-	redisClient := redis.NewUniversalClient(&redis.UniversalOptions{
-		Addrs: redisAddresses,
-	})
-
-	redisContext, redisContextCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer redisContextCancel()
-
-	_, err := redisClient.Ping(redisContext).Result()
-	if err != nil {
-		return nil, fmt.Errorf("redis: error pining redis in controller: %w", err)
-	}
-
-	appendonly, err := redisClient.ConfigGet(redisContext, "appendonly").Result()
-	if err != nil {
-		return nil, fmt.Errorf("redis: error checking appendonly config: %w", err)
-	}
-
-	if appendonly[1] != "yes" {
-		return nil, fmt.Errorf("redis: appendonly config must be set to 'yes': Value: '%v'", appendonly[1])
-	}
-
-	appendfsync, err := redisClient.ConfigGet(redisContext, "appendfsync").Result()
-	if err != nil {
-		return nil, fmt.Errorf("redis: error checking appendfsync config: %w", err)
-	}
-	if appendfsync[1] != "always" && appendfsync[1] != "everysec" {
-		return nil, fmt.Errorf("redis: appendfsync config must be set to 'always' or 'everysec': Value: '%v'", appendonly[1])
-	}
-
-	return &Controller{
-			redisClient: redisClient,
-			cluster:     cluster},
-		nil
+	return &Controller{cluster: cluster}, nil
 }
 
 func (c *Controller) findCoordinator(consumerGroup string) (*sarama.Broker, error) {
-	return c.cluster.kafkaClient.Coordinator(consumerGroup)
+	return c.cluster.saramaKafkaClient.Coordinator(consumerGroup)
 }
 
 func (c *Controller) JoinGroup(request *sarama.JoinGroupRequest) (*sarama.JoinGroupResponse, error) {
@@ -76,7 +43,7 @@ func (c *Controller) JoinGroup(request *sarama.JoinGroupRequest) (*sarama.JoinGr
 	defer redisContextCancel()
 
 	redisGroupGenerationKey := fmt.Sprintf("{group-%s}-generation", request.GroupId)
-	err = c.redisClient.Watch(redisContext, func(tx *redis.Tx) error {
+	err = c.cluster.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {
 		// TODO: make exp configurable
 		return tx.Set(redisContext, redisGroupGenerationKey, response.GenerationId, 7*24*time.Hour).Err()
 	}, redisGroupGenerationKey)
@@ -117,7 +84,7 @@ func (c *Controller) HeartBeat(request *sarama.HeartbeatRequest) (*sarama.Heartb
 	defer redisContextCancel()
 
 	redisGroupGenerationKey := fmt.Sprintf("{group-%s}-generation", request.GroupId)
-	err = c.redisClient.Watch(redisContext, func(tx *redis.Tx) error {
+	err = c.cluster.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {
 		generationId, err := tx.Get(redisContext, redisGroupGenerationKey).Int64()
 		if err != nil && err != redis.Nil {
 			return err
@@ -145,7 +112,7 @@ func (c *Controller) OffsetFetch(group, topic string, partition int32) (int64, e
 	redisGroupOffsetKey := fmt.Sprintf("{group-%s}-offset-topic-%s-partition-%d", group, c.base64Topic(topic), partition)
 
 	var offset int64
-	err := c.redisClient.Watch(redisContext, func(tx *redis.Tx) error {
+	err := c.cluster.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {
 		var err error
 		offset, err = tx.Get(redisContext, redisGroupOffsetKey).Int64()
 
@@ -167,7 +134,7 @@ func (c *Controller) OffsetFetchAllTopics(group string) (map[string]map[int32]in
 
 	redisGroupOffsetKeyPrefix := fmt.Sprintf("{group-%s}-offset-topic-", group)
 
-	err := c.redisClient.Watch(redisContext, func(tx *redis.Tx) error {
+	err := c.cluster.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {
 		scan := tx.Scan(redisContext, 0, fmt.Sprintf("%s*", redisGroupOffsetKeyPrefix), 0).Iterator()
 
 		for scan.Next(redisContext) {
@@ -216,7 +183,7 @@ func (c *Controller) OffsetCommit(group, topic string, groupGenerationId, partit
 	redisGroupGenerationKey := fmt.Sprintf("{group-%s}-generation", group)
 	redisGroupOffsetKey := fmt.Sprintf("{group-%s}-offset-topic-%s-partition-%d", group, c.base64Topic(topic), partition)
 
-	err := c.redisClient.Watch(redisContext, func(tx *redis.Tx) error {
+	err := c.cluster.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {
 		// generation will be -1 when we are resetting offsets
 		if groupGenerationId != -1 {
 			generationId, err := tx.Get(redisContext, redisGroupGenerationKey).Int64()

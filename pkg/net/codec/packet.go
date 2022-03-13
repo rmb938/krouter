@@ -9,11 +9,12 @@ type Packet struct {
 
 	Key     *int16
 	Version *int16
-	Data    []byte
+	Data    *bytes.Buffer
 }
 
 func DecodePacket(encodedData []byte) (*Packet, error) {
-	rawDecoder := &RawDecoder{Buff: bytes.NewBuffer(encodedData)}
+	buff := bytes.NewBuffer(encodedData)
+	rawDecoder := &RawDecoder{Buff: buff}
 
 	header := &RequestHeader{}
 	err := header.Decode(rawDecoder)
@@ -23,23 +24,24 @@ func DecodePacket(encodedData []byte) (*Packet, error) {
 
 	return &Packet{
 		ReqHeader: header,
-		Data:      rawDecoder.Buff.Bytes(),
+		Data:      buff,
 	}, nil
 }
 
 func (p *Packet) Encode(correlationId int32) ([]byte, error) {
 	header := &ResponseHeader{
-		Length:        int32(len(p.Data)),
+		Length:        int32(p.Data.Len()),
 		CorrelationId: correlationId,
 		Version:       *p.Version,
 	}
 
-	rawEncoder := &RawEncoder{Buff: bytes.NewBuffer(nil)}
+	rawEncoder := &RawEncoder{Buff: bytes.NewBuffer(make([]byte, 0, header.Length+8))}
 	err := header.Encode(rawEncoder)
 	if err != nil {
 		return nil, err
 	}
+	rawEncoder.RawBytes(p.Data.Bytes())
 
 	// return header + data
-	return append(rawEncoder.ToBytes(), p.Data...), nil
+	return rawEncoder.ToBytes(), nil
 }

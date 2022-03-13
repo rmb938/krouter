@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -36,7 +38,7 @@ func main() {
 	var redisAddressesFlag MultiFlag
 
 	flag.StringVar(&clusterID, "cluster-id", "some-cluster-id", "The Kafka cluster ID")
-	flag.StringVar(&listener, "listener", "localhost:29092", "The address to listener on")
+	flag.StringVar(&listener, "listener", "127.0.0.1:29092", "The address to listener on")
 	flag.StringVar(&advertiseListener, "advertise-listener", "localhost:29092", "The address to advertise to clients")
 	flag.Var(&redisAddressesFlag, "redis-addresses", "List of redis addresses (default \"localhost:6379\")")
 
@@ -80,6 +82,10 @@ func main() {
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		fmt.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	go func() {
 		err = r.ListenAndServe(listenerAddr, advertiseListenerAddr, clusterID, redisAddresses)

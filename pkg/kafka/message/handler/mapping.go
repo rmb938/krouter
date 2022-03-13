@@ -63,7 +63,7 @@ var MessageHandlerMapping = map[int16]map[int16]handler.MessageHandler{
 		initProducerIDV1.Version: &v1.Handler{},
 	},
 	produce.Key: {
-		producev7.Version: &handlerProduceV7.Handler{},
+		producev7.Version: &handlerProduceV7.FranzHandler{},
 	},
 	find_coordinator.Key: {
 		implFindCoordinatorV2.Version: &handlerFindCoordinatorV2.Handler{},

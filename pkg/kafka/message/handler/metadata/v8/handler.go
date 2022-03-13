@@ -1,6 +1,8 @@
 package v8
 
 import (
+	"context"
+
 	"github.com/go-logr/logr"
 	"github.com/rmb938/krouter/pkg/kafka/client"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
@@ -49,20 +51,39 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			Internal: false,
 		}
 
-		_, topic := client.Broker.GetTopic(topicName)
+		cluster, topic := client.Broker.GetTopic(topicName)
 		if topic != nil {
 			responseTopic.ErrCode = errors.None
 
 			for i := int32(0); i < topic.Partitions; i++ {
-				responseTopic.Partitions = append(responseTopic.Partitions,
-					metadatav8.Partitions{
-						Index:           i,
-						LeaderID:        1,
-						LeaderEpoch:     0, // TODO: this?
-						ReplicaNodes:    []int32{1},
-						ISRNodes:        []int32{1},
-						OfflineReplicas: []int32{},
-					})
+				log = log.WithValues("partition", i)
+
+				partition := metadatav8.Partitions{
+					Index:           i,
+					LeaderEpoch:     0, // TODO: this?
+					ReplicaNodes:    []int32{},
+					ISRNodes:        []int32{},
+					OfflineReplicas: []int32{},
+				}
+
+				leaderID, err := cluster.TopicLeader(context.TODO(), topic.Name, i)
+				if err != nil {
+					log.Error(err, "Error finding topic partition leader")
+					partition.ErrCode = errors.UnknownServerError
+					responseTopic.Partitions = append(responseTopic.Partitions, partition)
+					continue
+				}
+
+				if leaderID != -1 {
+					partition.LeaderID = 1
+					partition.ReplicaNodes = append(partition.ReplicaNodes, 1)
+					partition.ISRNodes = append(partition.ISRNodes, 1)
+				} else {
+					// TODO: schedule metadata refresh
+					partition.ErrCode = errors.LeaderNotAvailable
+				}
+
+				responseTopic.Partitions = append(responseTopic.Partitions, partition)
 			}
 		} else {
 			log.Error(nil, "Client tried to get metadata for a topic that doesn't exist")

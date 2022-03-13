@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker/topics"
+	"github.com/rmb938/krouter/pkg/redisw"
 )
 
 type Broker struct {
@@ -18,7 +19,7 @@ type Broker struct {
 
 	ephemeralID string
 
-	redisAddresses []string
+	redisClient *redisw.RedisClient
 
 	controller *Controller
 	clusters   map[string]*Cluster
@@ -27,14 +28,19 @@ type Broker struct {
 func InitBroker(log logr.Logger, advertiseListener *net.TCPAddr, clusterID string, redisAddresses []string) (*Broker, error) {
 	log = log.WithName("broker")
 
+	redisClient, err := redisw.NewRedisClient(redisAddresses)
+	if err != nil {
+		return nil, err
+	}
+
 	broker := &Broker{
 		AdvertiseListener: advertiseListener,
 		ClusterID:         clusterID,
 
-		log:            log,
-		ephemeralID:    uuid.Must(uuid.NewRandom()).String(),
-		redisAddresses: redisAddresses,
-		clusters:       map[string]*Cluster{},
+		log:         log,
+		ephemeralID: uuid.Must(uuid.NewRandom()).String(),
+		redisClient: redisClient,
+		clusters:    map[string]*Cluster{},
 	}
 
 	return broker, nil
@@ -60,7 +66,7 @@ func (b *Broker) registerCluster(name string, addrs []string) (*Cluster, error) 
 	}
 
 	var err error
-	b.clusters[name], err = NewCluster(name, addrs, b.log)
+	b.clusters[name], err = NewCluster(name, addrs, b.log, b.redisClient)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +82,7 @@ func (b *Broker) InitClusters() error {
 		return err
 	}
 
-	b.controller, err = NewController(b.log, cluster, b.redisAddresses)
+	b.controller, err = NewController(b.log, cluster)
 	if err != nil {
 		return err
 	}
@@ -107,7 +113,7 @@ func (b *Broker) InitClusters() error {
 		Enabled:    true,
 	})
 
-	cluster, err = b.registerCluster("cluster3", []string{"localhost:9095"})
+	cluster, err = b.registerCluster("cluster3", []string{"localhost:9392"})
 	if err != nil {
 		return err
 	}

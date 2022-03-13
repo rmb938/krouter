@@ -13,11 +13,11 @@ import (
 	"github.com/rmb938/krouter/pkg/net/message"
 )
 
-type Handler struct {
+type SaramaHandler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
-	log = log.WithName("produce-v7-handler")
+func (h *SaramaHandler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
+	log = log.WithName("sarama-produce-v7-handler")
 	request := message.(*v7.Request)
 
 	response := &v7.Response{}
@@ -83,8 +83,8 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 				ProducerEpoch:        rb.ProducerEpoch,
 				FirstSequence:        rb.BaseSequence,
 				IsTransactional:      rb.IsTransactional(),
+				Records:              make([]*sarama.Record, len(rb.Records)),
 			}
-			kafkaRb.Records = make([]*sarama.Record, len(rb.Records))
 
 			var recordsWG sync.WaitGroup
 			for index, r := range rb.Records {
@@ -114,7 +114,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 
 			kafkaProduceRequest.AddBatch(topicData.Name, partitionData.Index, kafkaRb)
 
-			kafkaProduceResponse, err := cluster.Produce(topic, partitionData.Index, kafkaProduceRequest)
+			kafkaProduceResponse, err := cluster.SaramaProduce(topic, partitionData.Index, kafkaProduceRequest)
 			if err != nil {
 				log.Error(err, "Error producing message to backend cluster")
 				if kafkaError, ok := err.(sarama.KError); ok {
