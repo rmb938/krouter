@@ -7,16 +7,16 @@ import (
 	handlerDescribeGroupsV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/describe_groups/v0"
 	handlerFetchV11 "github.com/rmb938/krouter/pkg/kafka/message/handler/fetch/v11"
 	handlerFindCoordinatorV2 "github.com/rmb938/krouter/pkg/kafka/message/handler/find_coordinator/v2"
-	handlerHearbeatV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/heartbeat/v0"
+	handlerHearbeatV3 "github.com/rmb938/krouter/pkg/kafka/message/handler/heartbeat/v3"
 	v1 "github.com/rmb938/krouter/pkg/kafka/message/handler/init_producer_id/v1"
-	handlerJoinGroupV4 "github.com/rmb938/krouter/pkg/kafka/message/handler/join_group/v4"
-	handlerLeaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/leave_group/v0"
+	handlerJoinGroupV5 "github.com/rmb938/krouter/pkg/kafka/message/handler/join_group/v5"
+	handlerLeaveGroupV3 "github.com/rmb938/krouter/pkg/kafka/message/handler/leave_group/v3"
 	handlerListOffsetsV5 "github.com/rmb938/krouter/pkg/kafka/message/handler/list_offsets/v5"
 	v8 "github.com/rmb938/krouter/pkg/kafka/message/handler/metadata/v8"
 	handlerOffsetCommitV4 "github.com/rmb938/krouter/pkg/kafka/message/handler/offset_commit/v4"
 	handlerOffsetFetchV4 "github.com/rmb938/krouter/pkg/kafka/message/handler/offset_fetch/v4"
 	handlerProduceV7 "github.com/rmb938/krouter/pkg/kafka/message/handler/produce/v7"
-	handlerSyncGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/sync_group/v0"
+	handlerSyncGroupV3 "github.com/rmb938/krouter/pkg/kafka/message/handler/sync_group/v3"
 	implAPIVersion "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version"
 	implAPIVersionV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v0"
 	implAPIVersionV2 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v2"
@@ -29,13 +29,13 @@ import (
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/find_coordinator"
 	implFindCoordinatorV2 "github.com/rmb938/krouter/pkg/kafka/message/impl/find_coordinator/v2"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/heartbeat"
-	implHeartbeatV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/heartbeat/v0"
+	implHeartbeatV3 "github.com/rmb938/krouter/pkg/kafka/message/impl/heartbeat/v3"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/init_producer_id"
 	initProducerIDV1 "github.com/rmb938/krouter/pkg/kafka/message/impl/init_producer_id/v1"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/join_group"
-	implJoinGroupV4 "github.com/rmb938/krouter/pkg/kafka/message/impl/join_group/v4"
+	implJoinGroupV5 "github.com/rmb938/krouter/pkg/kafka/message/impl/join_group/v5"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group"
-	implLeaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group/v0"
+	implLeaveGroupV3 "github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group/v3"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets"
 	implListOffsetsV5 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v5"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
@@ -47,7 +47,7 @@ import (
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
 	producev7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group"
-	implSyncGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group/v0"
+	implSyncGroupV3 "github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group/v3"
 	"github.com/rmb938/krouter/pkg/net/message/handler"
 )
 
@@ -69,13 +69,13 @@ var MessageHandlerMapping = map[int16]map[int16]handler.MessageHandler{
 		implFindCoordinatorV2.Version: &handlerFindCoordinatorV2.Handler{},
 	},
 	join_group.Key: {
-		implJoinGroupV4.Version: &handlerJoinGroupV4.Handler{},
+		implJoinGroupV5.Version: &handlerJoinGroupV5.Handler{},
 	},
 	sync_group.Key: {
-		implSyncGroupV0.Version: &handlerSyncGroupV0.Handler{},
+		implSyncGroupV3.Version: &handlerSyncGroupV3.Handler{},
 	},
 	leave_group.Key: {
-		implLeaveGroupV0.Version: &handlerLeaveGroupV0.Handler{},
+		implLeaveGroupV3.Version: &handlerLeaveGroupV3.Handler{},
 	},
 	offset_fetch.Key: {
 		implOffsetFetchv4.Version: &handlerOffsetFetchV4.Handler{},
@@ -87,7 +87,7 @@ var MessageHandlerMapping = map[int16]map[int16]handler.MessageHandler{
 		implFetchV11.Version: &handlerFetchV11.Handler{},
 	},
 	heartbeat.Key: {
-		implHeartbeatV0.Version: &handlerHearbeatV0.Handler{},
+		implHeartbeatV3.Version: &handlerHearbeatV3.Handler{},
 	},
 	offset_commit.Key: {
 		implOffsetCommitV4.Version: &handlerOffsetCommitV4.Handler{},

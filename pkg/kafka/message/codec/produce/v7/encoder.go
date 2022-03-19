@@ -1,8 +1,6 @@
 package v7
 
 import (
-	"time"
-
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
 	v7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
 	"github.com/rmb938/krouter/pkg/net/codec"
@@ -45,7 +43,7 @@ func (e *Encoder) Encode(message message.Message) (*codec.Packet, error) {
 	}
 
 	// throttle_time_ms
-	builder.Encoder.Int32(int32(msg.ThrottleDuration / time.Millisecond))
+	builder.Encoder.Int32(int32(msg.ThrottleDuration.Milliseconds()))
 
 	return builder.ToPacket(), nil
 }

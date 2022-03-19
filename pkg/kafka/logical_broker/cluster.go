@@ -5,14 +5,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Shopify/sarama"
 	"github.com/go-logr/logr"
 	"github.com/go-redis/redis/v8"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker/topics"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group"
+	implSyncGroupV3 "github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group/v3"
 	"github.com/rmb938/krouter/pkg/redisw"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
+	"github.com/twmb/franz-go/pkg/kversion"
 )
 
 const (
@@ -28,8 +30,7 @@ type Cluster struct {
 
 	redisClient *redisw.RedisClient
 
-	saramaKafkaClient sarama.Client
-	franzKafkaClient  *kgo.Client
+	franzKafkaClient *kgo.Client
 
 	topics map[string]*topics.Topic
 }
@@ -48,10 +49,6 @@ func NewCluster(name string, addrs []string, log logr.Logger, redisClient *redis
 		topics:                  map[string]*topics.Topic{},
 	}
 
-	if err := cluster.initSaramaKafkaClient(addrs); err != nil {
-		return nil, err
-	}
-
 	if err := cluster.initFranzKafkaClient(addrs); err != nil {
 		return nil, err
 	}
@@ -59,40 +56,18 @@ func NewCluster(name string, addrs []string, log logr.Logger, redisClient *redis
 	return cluster, nil
 }
 
-func (c *Cluster) initSaramaKafkaClient(addrs []string) error {
-	c.log.Info("Creating cluster client")
-	saramaConfig := sarama.NewConfig()
-	saramaConfig.Version = sarama.V2_6_0_0
-
-	// TODO: if the brokers we are connected to restart we get a broken pipe error
-	// {"level":"error","ts":1646785492.4811382,"logger":"router.packet-processor.describe-groups-v0-handler","msg":"Error describing group to controller","from-address":"127.0.0.1:43656","group":"same-group1","error":"write tcp [::1]:45220->[::1]:19093: write: broken pipe"}
-	// {"level":"error","ts":1646785492.481163,"logger":"router","msg":"error processing packet","from-address":"127.0.0.1:43656","error":"error handling packet: error describing group to controller: write tcp [::1]:45220->[::1]:19093: write: broken pipe"}
-	// TODO: we need to come up with a way to check the connection and re-open it if needed
-	//  it eventually fixes itself but we can't tolerate these
-
-	var err error
-	c.saramaKafkaClient, err = sarama.NewClient(addrs, saramaConfig)
-	if err != nil {
-		return fmt.Errorf("error creating kafka client for cluster: %v: %w", c.Name, err)
-	}
-
-	if err := c.saramaKafkaClient.RefreshMetadata(); err != nil {
-		return fmt.Errorf("error refreshing metadata for cluster: %v: %w", c.Name, err)
-	}
-
-	if _, err := c.saramaKafkaClient.RefreshController(); err != nil {
-		return fmt.Errorf("error refreshing controller for cluster: %v: %w", c.Name, err)
-	}
-
-	return nil
-}
-
 func (c *Cluster) initFranzKafkaClient(addrs []string) error {
+
+	// pull maxVersions
+	maxVersions := kversion.Stable()
+	// need to pin the max version of sync_group due to protocol setting in newer versions
+	maxVersions.SetMaxKeyVersion(sync_group.Key, implSyncGroupV3.Version)
 
 	var err error
 	c.franzKafkaClient, err = kgo.NewClient(
 		kgo.SeedBrokers(addrs...),
 		kgo.RequiredAcks(kgo.AllISRAcks()),
+		kgo.MaxVersions(maxVersions),
 	)
 	if err != nil {
 		return err
@@ -104,7 +79,7 @@ func (c *Cluster) initFranzKafkaClient(addrs []string) error {
 func (c *Cluster) Close() error {
 	c.metadatRefreshCtxCancel()
 	c.franzKafkaClient.Close()
-	return c.saramaKafkaClient.Close()
+	return nil
 }
 
 func (c *Cluster) GetTopics() map[string]*topics.Topic {
@@ -293,7 +268,7 @@ func (c *Cluster) Fetch(topic *topics.Topic, partition int32, request *kmsg.Fetc
 		return response, nil
 	}
 
-	response, err := c.franzKafkaClient.Broker(leaderID).Request(ctx, request)
+	response, err := c.franzKafkaClient.Broker(leaderID).RetriableRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}

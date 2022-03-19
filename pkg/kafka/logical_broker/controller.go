@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Shopify/sarama"
 	"github.com/go-logr/logr"
 	"github.com/go-redis/redis/v8"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
@@ -71,125 +70,131 @@ func (c *Controller) groupCoordinator(ctx context.Context, consumerGroup string)
 	return brokerID, nil
 }
 
-func (c *Controller) JoinGroup(request *sarama.JoinGroupRequest) (*sarama.JoinGroupResponse, error) {
+func (c *Controller) JoinGroup(request *kmsg.JoinGroupRequest) (*kmsg.JoinGroupResponse, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	coordinatorId, err := c.groupCoordinator(ctx, request.GroupId)
+	coordinatorId, err := c.groupCoordinator(ctx, request.Group)
 	if err != nil {
 		return nil, err
 	}
 
 	if coordinatorId == -1 {
-		return &sarama.JoinGroupResponse{
-			Err: sarama.KError(errors.NotCoordinator),
-		}, nil
+		response := kmsg.NewPtrJoinGroupResponse()
+		response.ErrorCode = int16(errors.NotCoordinator)
+
+		return response, nil
 	}
 
-	coordinatorBroker, err := c.cluster.saramaKafkaClient.Broker(int32(coordinatorId))
+	resp, err := c.cluster.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}
 
-	response, err := coordinatorBroker.JoinGroup(request)
-	if err != nil {
-		return response, err
-	}
+	joinGroupResponse := resp.(*kmsg.JoinGroupResponse)
 
-	if int16(response.Err) == int16(errors.None) {
-		redisGroupGenerationKey := fmt.Sprintf(GroupGenerationRedisKeyFmt, request.GroupId)
+	if joinGroupResponse.ErrorCode == int16(errors.None) {
+		redisGroupGenerationKey := fmt.Sprintf(GroupGenerationRedisKeyFmt, request.Group)
 		err = c.cluster.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
 			// TODO: make exp configurable
-			return tx.Set(ctx, redisGroupGenerationKey, response.GenerationId, 7*24*time.Hour).Err()
+			return tx.Set(ctx, redisGroupGenerationKey, joinGroupResponse.Generation, 7*24*time.Hour).Err()
 		}, redisGroupGenerationKey)
 	}
 
-	return response, err
+	return joinGroupResponse, err
 }
 
-func (c *Controller) SyncGroup(request *sarama.SyncGroupRequest) (*sarama.SyncGroupResponse, error) {
-	coordinatorId, err := c.groupCoordinator(context.TODO(), request.GroupId)
-	if err != nil {
-		return nil, err
-	}
-
-	if coordinatorId == -1 {
-		return &sarama.SyncGroupResponse{
-			Err: sarama.KError(errors.NotCoordinator),
-		}, nil
-	}
-
-	coordinatorBroker, err := c.cluster.saramaKafkaClient.Broker(int32(coordinatorId))
-	if err != nil {
-		return nil, err
-	}
-
-	return coordinatorBroker.SyncGroup(request)
-}
-
-func (c *Controller) LeaveGroup(request *sarama.LeaveGroupRequest) (*sarama.LeaveGroupResponse, error) {
-	coordinatorId, err := c.groupCoordinator(context.TODO(), request.GroupId)
-	if err != nil {
-		return nil, err
-	}
-
-	if coordinatorId == -1 {
-		return &sarama.LeaveGroupResponse{
-			Err: sarama.KError(errors.NotCoordinator),
-		}, nil
-	}
-
-	coordinatorBroker, err := c.cluster.saramaKafkaClient.Broker(int32(coordinatorId))
-	if err != nil {
-		return nil, err
-	}
-
-	return coordinatorBroker.LeaveGroup(request)
-}
-
-func (c *Controller) HeartBeat(request *sarama.HeartbeatRequest) (*sarama.HeartbeatResponse, error) {
+func (c *Controller) SyncGroup(request *kmsg.SyncGroupRequest) (*kmsg.SyncGroupResponse, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	coordinatorId, err := c.groupCoordinator(ctx, request.GroupId)
+	coordinatorId, err := c.groupCoordinator(ctx, request.Group)
 	if err != nil {
 		return nil, err
 	}
 
 	if coordinatorId == -1 {
-		return &sarama.HeartbeatResponse{
-			Err: sarama.KError(errors.NotCoordinator),
-		}, nil
+		response := kmsg.NewPtrSyncGroupResponse()
+		response.ErrorCode = int16(errors.NotCoordinator)
+
+		return response, nil
 	}
 
-	coordinatorBroker, err := c.cluster.saramaKafkaClient.Broker(int32(coordinatorId))
+	resp, err := c.cluster.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}
 
-	response, err := coordinatorBroker.Heartbeat(request)
+	return resp.(*kmsg.SyncGroupResponse), nil
+}
+
+func (c *Controller) LeaveGroup(request *kmsg.LeaveGroupRequest) (*kmsg.LeaveGroupResponse, error) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	coordinatorId, err := c.groupCoordinator(ctx, request.Group)
 	if err != nil {
-		return response, err
+		return nil, err
 	}
 
-	if int16(response.Err) == int16(errors.None) {
-		redisGroupGenerationKey := fmt.Sprintf(GroupGenerationRedisKeyFmt, request.GroupId)
+	if coordinatorId == -1 {
+		response := kmsg.NewPtrLeaveGroupResponse()
+		response.ErrorCode = int16(errors.NotCoordinator)
+
+		return response, nil
+	}
+
+	resp, err := c.cluster.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.(*kmsg.LeaveGroupResponse), nil
+}
+
+func (c *Controller) HeartBeat(request *kmsg.HeartbeatRequest) (*kmsg.HeartbeatResponse, error) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	coordinatorId, err := c.groupCoordinator(ctx, request.Group)
+	if err != nil {
+		return nil, err
+	}
+
+	if coordinatorId == -1 {
+		response := kmsg.NewPtrHeartbeatResponse()
+		response.ErrorCode = int16(errors.NotCoordinator)
+
+		return response, nil
+	}
+
+	resp, err := c.cluster.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	heartBeatResponse := resp.(*kmsg.HeartbeatResponse)
+
+	if heartBeatResponse.ErrorCode == int16(errors.None) {
+		redisGroupGenerationKey := fmt.Sprintf(GroupGenerationRedisKeyFmt, request.Group)
 		err = c.cluster.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
 			generationId, err := tx.Get(ctx, redisGroupGenerationKey).Int64()
 			if err != nil && err != redis.Nil {
 				return err
 			}
 
-			if err == redis.Nil || generationId != int64(request.GenerationId) {
-				return sarama.KError(errors.IllegalGeneration)
+			if err == redis.Nil || generationId != int64(request.Generation) {
+				heartBeatResponse = kmsg.NewPtrHeartbeatResponse()
+				heartBeatResponse.ErrorCode = int16(errors.IllegalGeneration)
+				return nil
 			}
 
 			// TODO: make exp configurable
-			return tx.Set(ctx, redisGroupGenerationKey, request.GenerationId, 7*24*time.Hour).Err()
+			return tx.Set(ctx, redisGroupGenerationKey, request.Generation, 7*24*time.Hour).Err()
 		}, redisGroupGenerationKey)
 	}
 
-	return response, err
+	return heartBeatResponse, err
 }
 
 func (c *Controller) base64Topic(topic string) string {
@@ -265,8 +270,10 @@ func (c *Controller) OffsetFetchAllTopics(group string) (map[string]map[int32]in
 	return offsets, err
 }
 
-func (c *Controller) OffsetCommit(group, topic string, groupGenerationId, partition int32, offset int64) error {
+func (c *Controller) OffsetCommit(group, topic string, groupGenerationId, partition int32, offset int64) (errors.KafkaError, error) {
 	// TODO: to expire these, every 5 minutes do a `SCAN MATCH group-offset-*` and see if a generation exists, if it doesn't delete it
+
+	kafkaError := errors.None
 
 	redisContext, redisContextCancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer redisContextCancel()
@@ -282,37 +289,45 @@ func (c *Controller) OffsetCommit(group, topic string, groupGenerationId, partit
 			}
 
 			if err == redis.Nil || generationId != int64(groupGenerationId) {
-				return sarama.KError(errors.IllegalGeneration)
+				kafkaError = errors.IllegalGeneration
+				return nil
 			}
 		}
 
 		return tx.Set(redisContext, redisGroupOffsetKey, offset, 0).Err()
 	}, redisGroupGenerationKey)
 
-	return err
+	return kafkaError, err
 }
 
-func (c *Controller) DescribeGroup(group string) (*sarama.DescribeGroupsResponse, error) {
-	coordinatorId, err := c.groupCoordinator(context.TODO(), group)
+func (c *Controller) DescribeGroup(group string) (*kmsg.DescribeGroupsResponse, error) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	coordinatorId, err := c.groupCoordinator(ctx, group)
 	if err != nil {
 		return nil, err
 	}
 
 	if coordinatorId == -1 {
-		return &sarama.DescribeGroupsResponse{
-			Groups: []*sarama.GroupDescription{
-				{
-					Err:     sarama.KError(errors.NotCoordinator),
-					GroupId: group,
-				},
-			},
-		}, nil
+		response := kmsg.NewPtrDescribeGroupsResponse()
+
+		responseGroup := kmsg.NewDescribeGroupsResponseGroup()
+		responseGroup.ErrorCode = int16(errors.NotCoordinator)
+		responseGroup.Group = group
+
+		response.Groups = append(response.Groups, responseGroup)
+
+		return response, nil
 	}
 
-	coordinatorBroker, err := c.cluster.saramaKafkaClient.Broker(int32(coordinatorId))
+	request := kmsg.NewPtrDescribeGroupsRequest()
+	request.Groups = append(request.Groups, group)
+
+	resp, err := c.cluster.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}
 
-	return coordinatorBroker.DescribeGroups(&sarama.DescribeGroupsRequest{Groups: []string{group}})
+	return resp.(*kmsg.DescribeGroupsResponse), nil
 }

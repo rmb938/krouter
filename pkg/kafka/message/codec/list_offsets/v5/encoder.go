@@ -16,7 +16,7 @@ func (e *Encoder) Encode(message message.Message) (*codec.Packet, error) {
 	builder := codec.NewPacketBuilder(find_coordinator.Key, msg.Version())
 
 	// throttle_time_ms
-	builder.Encoder.Int32(int32(msg.ThrottleDuration))
+	builder.Encoder.Int32(int32(msg.ThrottleDuration.Milliseconds()))
 
 	// topics
 	builder.Encoder.ArrayLength(len(msg.Topics))

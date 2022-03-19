@@ -3,7 +3,6 @@ package v4
 import (
 	"fmt"
 
-	"github.com/Shopify/sarama"
 	"github.com/go-logr/logr"
 	"github.com/rmb938/krouter/pkg/kafka/client"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
@@ -54,11 +53,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			offset, err := client.Broker.GetController().OffsetFetch(request.GroupID, topic.Name, partitionIndex)
 			if err != nil {
 				log.Error(err, "error fetching offsets to controller")
-				if kafkaError, ok := err.(sarama.KError); ok {
-					offsetFetchTopicPartition.ErrCode = errors.KafkaError(kafkaError)
-				} else {
-					return fmt.Errorf("error fetching offsets to controller: %w", err)
-				}
+				return fmt.Errorf("error fetching offsets to controller: %w", err)
 			}
 
 			if offsetFetchTopicPartition.ErrCode == errors.None {

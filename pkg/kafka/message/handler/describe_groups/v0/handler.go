@@ -3,7 +3,6 @@ package v0
 import (
 	"fmt"
 
-	"github.com/Shopify/sarama"
 	"github.com/go-logr/logr"
 	"github.com/rmb938/krouter/pkg/kafka/client"
 	v0 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_groups/v0"
@@ -32,31 +31,23 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		kafkaResponseDescribeGroup, err := client.Broker.GetController().DescribeGroup(group)
 		if err != nil {
 			log.Error(err, "Error describing group to controller")
-			if kafkaError, ok := err.(sarama.KError); ok {
-				responseGroup.ErrCode = errors.KafkaError(kafkaError)
-				response.Groups = append(response.Groups, responseGroup)
-				continue
-			}
 			return fmt.Errorf("error describing group to controller: %w", err)
 		}
 
-		if kafkaResponseDescribeGroup != nil {
-			kafkaResponseGroup := kafkaResponseDescribeGroup.Groups[0]
-			responseGroup.ErrCode = errors.KafkaError(kafkaResponseGroup.Err)
-			responseGroup.GroupState = kafkaResponseGroup.State
-			responseGroup.ProtocolType = kafkaResponseGroup.ProtocolType
-			responseGroup.ProtocolData = kafkaResponseGroup.Protocol
+		kafkaResponseGroup := kafkaResponseDescribeGroup.Groups[0]
+		responseGroup.ErrCode = errors.KafkaError(kafkaResponseGroup.ErrorCode)
+		responseGroup.GroupState = kafkaResponseGroup.State
+		responseGroup.ProtocolType = kafkaResponseGroup.ProtocolType
+		responseGroup.ProtocolData = kafkaResponseGroup.Protocol
 
-			for memberId, kafkaResponseMember := range kafkaResponseGroup.Members {
-				responseGroup.Members = append(responseGroup.Members, v0.DescribeGroupMembersResponse{
-					MemberID:         memberId,
-					ClientID:         kafkaResponseMember.ClientId,
-					ClientHost:       kafkaResponseMember.ClientHost,
-					MemberMetadata:   kafkaResponseMember.MemberMetadata,
-					MemberAssignment: kafkaResponseMember.MemberAssignment,
-				})
-			}
-
+		for _, kafkaResponseMember := range kafkaResponseGroup.Members {
+			responseGroup.Members = append(responseGroup.Members, v0.DescribeGroupMembersResponse{
+				MemberID:         kafkaResponseMember.MemberID,
+				ClientID:         kafkaResponseMember.ClientID,
+				ClientHost:       kafkaResponseMember.ClientHost,
+				MemberMetadata:   kafkaResponseMember.ProtocolMetadata,
+				MemberAssignment: kafkaResponseMember.MemberAssignment,
+			})
 		}
 
 		response.Groups = append(response.Groups, responseGroup)

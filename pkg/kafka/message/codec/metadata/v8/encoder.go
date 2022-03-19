@@ -1,8 +1,6 @@
 package v8
 
 import (
-	"time"
-
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
 	v8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
 	"github.com/rmb938/krouter/pkg/net/codec"
@@ -18,7 +16,7 @@ func (e *Encoder) Encode(message message.Message) (*codec.Packet, error) {
 	builder := codec.NewPacketBuilder(metadata.Key, msg.Version())
 
 	// throttle_time_ms
-	builder.Encoder.Int32(int32(msg.ThrottleDuration / time.Millisecond))
+	builder.Encoder.Int32(int32(msg.ThrottleDuration.Milliseconds()))
 
 	// brokers
 	builder.Encoder.ArrayLength(len(msg.Brokers))

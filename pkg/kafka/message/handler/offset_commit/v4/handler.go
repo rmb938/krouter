@@ -3,7 +3,6 @@ package v4
 import (
 	"fmt"
 
-	"github.com/Shopify/sarama"
 	"github.com/go-logr/logr"
 	"github.com/rmb938/krouter/pkg/kafka/client"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
@@ -47,16 +46,13 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 				continue
 			}
 
-			err := client.Broker.GetController().OffsetCommit(request.GroupID, topic.Name, request.GenerationID, requestPartition.PartitionIndex, requestPartition.CommittedOffset)
+			kafkaErr, err := client.Broker.GetController().OffsetCommit(request.GroupID, topic.Name, request.GenerationID, requestPartition.PartitionIndex, requestPartition.CommittedOffset)
 			if err != nil {
 				log.Error(err, "Error offset commit to controller")
-				if kafkaError, ok := err.(sarama.KError); ok {
-					partitionResponse.ErrCode = errors.KafkaError(kafkaError)
-				} else {
-					return fmt.Errorf("error offset commit to backend cluster: %w", err)
-				}
+				return fmt.Errorf("error offset commit to backend cluster: %w", err)
 			}
 
+			partitionResponse.ErrCode = kafkaErr
 			topicResponse.Partitions = append(topicResponse.Partitions, partitionResponse)
 		}
 

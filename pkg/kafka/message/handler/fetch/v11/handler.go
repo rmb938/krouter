@@ -59,17 +59,6 @@ topicLoop:
 				continue
 			}
 
-			// kafkaFetchRequest := &sarama.FetchRequest{
-			// 	MaxWaitTime:  int32(request.MaxWait.Milliseconds()),
-			// 	MinBytes:     request.MinBytes,
-			// 	MaxBytes:     request.MaxBytes,
-			// 	Version:      request.Version(),
-			// 	Isolation:    sarama.IsolationLevel(request.IsolationLevel),
-			// 	SessionID:    request.SessionID,
-			// 	SessionEpoch: request.SessionEpoch,
-			// 	RackID:       request.RackID,
-			// }
-
 			kafkaFetchRequest := kmsg.NewPtrFetchRequest()
 			kafkaFetchRequest.ReplicaID = -1
 			kafkaFetchRequest.MaxWaitMillis = int32(request.MaxWait.Milliseconds())
