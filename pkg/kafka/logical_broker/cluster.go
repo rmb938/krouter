@@ -184,17 +184,17 @@ func (c *Cluster) TopicMetadata(ctx context.Context, topics []string) (*kmsg.Met
 	return metadataResponse, nil
 }
 
-func (c *Cluster) FranzProduce(topic *topics.Topic, partition int32, transactionID *string, timeoutMillis int32, recordBytes []byte) (*kmsg.ProduceResponse, error) {
+func (c *Cluster) Produce(topic *topics.Topic, partition int32, transactionID *string, timeoutMillis int32, recordBytes []byte) (*kmsg.ProduceResponse, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	brokerID, err := c.TopicLeader(ctx, topic.Name, partition)
+	leaderID, err := c.TopicLeader(ctx, topic.Name, partition)
 	if err != nil {
 		return nil, err
 	}
 
-	if brokerID == -1 {
-		// can't find topic leader
+	if leaderID == -1 {
+		// can't find topic partition leader
 		return &kmsg.ProduceResponse{
 			Topics: []kmsg.ProduceResponseTopic{
 				{
@@ -210,7 +210,7 @@ func (c *Cluster) FranzProduce(topic *topics.Topic, partition int32, transaction
 		}, nil
 	}
 
-	response, err := c.franzKafkaClient.Broker(brokerID).RetriableRequest(ctx, &kmsg.ProduceRequest{
+	response, err := c.franzKafkaClient.Broker(leaderID).RetriableRequest(ctx, &kmsg.ProduceRequest{
 		TransactionID: transactionID,
 		TimeoutMillis: timeoutMillis,
 		Topics: []kmsg.ProduceRequestTopic{{
@@ -230,43 +230,72 @@ func (c *Cluster) FranzProduce(topic *topics.Topic, partition int32, transaction
 	return response.(*kmsg.ProduceResponse), nil
 }
 
-func (c *Cluster) SaramaProduce(topic *topics.Topic, partition int32, request *sarama.ProduceRequest) (*sarama.ProduceResponse, error) {
-	leaderID, err := c.TopicLeader(context.TODO(), topic.Name, partition)
+func (c *Cluster) ListOffsets(topic *topics.Topic, partition int32, request *kmsg.ListOffsetsRequest) (*kmsg.ListOffsetsResponse, error) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	leaderID, err := c.TopicLeader(ctx, topic.Name, partition)
 	if err != nil {
 		return nil, err
 	}
 
-	broker, err := c.saramaKafkaClient.Broker(int32(leaderID))
+	if leaderID == -1 {
+		// can't find topic partition leader
+		response := kmsg.NewPtrListOffsetsResponse()
+
+		responseTopic := kmsg.NewListOffsetsResponseTopic()
+		responseTopic.Topic = topic.Name
+
+		responsePartition := kmsg.NewListOffsetsResponseTopicPartition()
+		responsePartition.Partition = partition
+		responsePartition.ErrorCode = int16(errors.UnknownTopicOrPartition)
+
+		responseTopic.Partitions = append(responseTopic.Partitions, responsePartition)
+
+		response.Topics = append(response.Topics, responseTopic)
+		return response, nil
+	}
+
+	response, err := c.franzKafkaClient.Broker(leaderID).RetriableRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}
-	return broker.Produce(request)
+
+	return response.(*kmsg.ListOffsetsResponse), nil
 }
 
-func (c *Cluster) ListOffsets(topic *topics.Topic, partition int32, request *sarama.OffsetRequest) (*sarama.OffsetResponse, error) {
-	leaderID, err := c.TopicLeader(context.TODO(), topic.Name, partition)
+func (c *Cluster) Fetch(topic *topics.Topic, partition int32, request *kmsg.FetchRequest) (*kmsg.FetchResponse, error) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	leaderID, err := c.TopicLeader(ctx, topic.Name, partition)
 	if err != nil {
 		return nil, err
 	}
 
-	broker, err := c.saramaKafkaClient.Broker(int32(leaderID))
+	if leaderID == -1 {
+		// can't find topic leader
+		response := kmsg.NewPtrFetchResponse()
+		response.SessionID = request.SessionID
+
+		responseTopic := kmsg.NewFetchResponseTopic()
+		responseTopic.Topic = topic.Name
+
+		responseTopicPartition := kmsg.NewFetchResponseTopicPartition()
+		responseTopicPartition.Partition = partition
+		responseTopicPartition.ErrorCode = int16(errors.UnknownTopicOrPartition)
+
+		responseTopic.Partitions = append(responseTopic.Partitions, responseTopicPartition)
+
+		response.Topics = append(response.Topics, responseTopic)
+
+		return response, nil
+	}
+
+	response, err := c.franzKafkaClient.Broker(leaderID).Request(ctx, request)
 	if err != nil {
 		return nil, err
 	}
 
-	return broker.GetAvailableOffsets(request)
-}
-
-func (c *Cluster) Fetch(topic *topics.Topic, partition int32, request *sarama.FetchRequest) (*sarama.FetchResponse, error) {
-	leaderID, err := c.TopicLeader(context.TODO(), topic.Name, partition)
-	if err != nil {
-		return nil, err
-	}
-
-	broker, err := c.saramaKafkaClient.Broker(int32(leaderID))
-	if err != nil {
-		return nil, err
-	}
-
-	return broker.Fetch(request)
+	return response.(*kmsg.FetchResponse), nil
 }

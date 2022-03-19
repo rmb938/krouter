@@ -40,6 +40,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 				Name:     topicName,
 				Internal: false,
 			})
+			continue
 		}
 
 		if _, ok := uniqueClusters[cluster]; !ok {

@@ -1,9 +1,9 @@
-package v3
+package v5
 
 import (
 	"time"
 
-	v3 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v3"
+	v5 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v5"
 	"github.com/rmb938/krouter/pkg/net/codec"
 	"github.com/rmb938/krouter/pkg/net/message"
 )
@@ -13,7 +13,7 @@ type Decoder struct {
 
 func (d *Decoder) Decode(reader *codec.PackerReader) (message.Message, error) {
 
-	msg := &v3.Request{}
+	msg := &v5.Request{}
 
 	var err error
 	if msg.ReplicaID, err = reader.Int32(); err != nil {
@@ -29,7 +29,7 @@ func (d *Decoder) Decode(reader *codec.PackerReader) (message.Message, error) {
 		return nil, err
 	}
 	for i := int32(0); i < topicsLength; i++ {
-		topicRequest := v3.ListOffsetsTopicRequest{}
+		topicRequest := v5.ListOffsetsTopicRequest{}
 
 		if topicRequest.Name, err = reader.String(); err != nil {
 			return nil, err
@@ -40,9 +40,13 @@ func (d *Decoder) Decode(reader *codec.PackerReader) (message.Message, error) {
 			return nil, err
 		}
 		for i := int32(0); i < partitionsLength; i++ {
-			partitionRequest := v3.ListOffsetsPartitionRequest{}
+			partitionRequest := v5.ListOffsetsPartitionRequest{}
 
 			if partitionRequest.PartitionIndex, err = reader.Int32(); err != nil {
+				return nil, err
+			}
+
+			if partitionRequest.CurrentLeaderEpoch, err = reader.Int32(); err != nil {
 				return nil, err
 			}
 

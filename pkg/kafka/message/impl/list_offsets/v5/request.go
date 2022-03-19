@@ -1,10 +1,11 @@
-package v3
+package v5
 
 import "time"
 
 type ListOffsetsPartitionRequest struct {
-	PartitionIndex int32
-	Timestamp      time.Time
+	PartitionIndex     int32
+	CurrentLeaderEpoch int32
+	Timestamp          time.Time
 }
 
 type ListOffsetsTopicRequest struct {

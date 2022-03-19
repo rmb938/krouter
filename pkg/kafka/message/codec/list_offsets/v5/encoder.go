@@ -1,8 +1,8 @@
-package v3
+package v5
 
 import (
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/find_coordinator"
-	v3 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v3"
+	v5 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v5"
 	"github.com/rmb938/krouter/pkg/net/codec"
 	"github.com/rmb938/krouter/pkg/net/message"
 )
@@ -11,7 +11,7 @@ type Encoder struct {
 }
 
 func (e *Encoder) Encode(message message.Message) (*codec.Packet, error) {
-	msg := message.(*v3.Response)
+	msg := message.(*v5.Response)
 
 	builder := codec.NewPacketBuilder(find_coordinator.Key, msg.Version())
 
@@ -38,6 +38,9 @@ func (e *Encoder) Encode(message message.Message) (*codec.Packet, error) {
 
 			// offset
 			builder.Encoder.Int64(partition.Offset)
+
+			// leader epoch
+			builder.Encoder.Int32(partition.LeaderEpoch)
 		}
 	}
 

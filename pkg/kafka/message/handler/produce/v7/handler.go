@@ -11,10 +11,10 @@ import (
 	"github.com/rmb938/krouter/pkg/net/message"
 )
 
-type FranzHandler struct {
+type Handler struct {
 }
 
-func (h *FranzHandler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
+func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
 	log = log.WithName("franz-produce-v7-handler")
 	request := message.(*v7.Request)
 
@@ -51,7 +51,7 @@ func (h *FranzHandler) Handle(client *client.Client, log logr.Logger, message me
 				continue
 			}
 
-			kafkaResponse, err := cluster.FranzProduce(topic, partitionData.Index, request.TransactionalID, int32(request.TimeoutDuration.Milliseconds()), partitionData.Records)
+			kafkaResponse, err := cluster.Produce(topic, partitionData.Index, request.TransactionalID, int32(request.TimeoutDuration.Milliseconds()), partitionData.Records)
 			if err != nil {
 				log.Error(err, "Error producing message to backend cluster")
 				return fmt.Errorf("error producing to kafka: %w", err)

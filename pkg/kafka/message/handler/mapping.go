@@ -11,7 +11,7 @@ import (
 	v1 "github.com/rmb938/krouter/pkg/kafka/message/handler/init_producer_id/v1"
 	handlerJoinGroupV4 "github.com/rmb938/krouter/pkg/kafka/message/handler/join_group/v4"
 	handlerLeaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/leave_group/v0"
-	handlerListOffsetsV3 "github.com/rmb938/krouter/pkg/kafka/message/handler/list_offsets/v3"
+	handlerListOffsetsV5 "github.com/rmb938/krouter/pkg/kafka/message/handler/list_offsets/v5"
 	v8 "github.com/rmb938/krouter/pkg/kafka/message/handler/metadata/v8"
 	handlerOffsetCommitV4 "github.com/rmb938/krouter/pkg/kafka/message/handler/offset_commit/v4"
 	handlerOffsetFetchV4 "github.com/rmb938/krouter/pkg/kafka/message/handler/offset_fetch/v4"
@@ -37,7 +37,7 @@ import (
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group"
 	implLeaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets"
-	implListOffsetsV3 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v3"
+	implListOffsetsV5 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v5"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/offset_commit"
@@ -63,7 +63,7 @@ var MessageHandlerMapping = map[int16]map[int16]handler.MessageHandler{
 		initProducerIDV1.Version: &v1.Handler{},
 	},
 	produce.Key: {
-		producev7.Version: &handlerProduceV7.FranzHandler{},
+		producev7.Version: &handlerProduceV7.Handler{},
 	},
 	find_coordinator.Key: {
 		implFindCoordinatorV2.Version: &handlerFindCoordinatorV2.Handler{},
@@ -81,7 +81,7 @@ var MessageHandlerMapping = map[int16]map[int16]handler.MessageHandler{
 		implOffsetFetchv4.Version: &handlerOffsetFetchV4.Handler{},
 	},
 	list_offsets.Key: {
-		implListOffsetsV3.Version: &handlerListOffsetsV3.Handler{},
+		implListOffsetsV5.Version: &handlerListOffsetsV5.Handler{},
 	},
 	fetch.Key: {
 		implFetchV11.Version: &handlerFetchV11.Handler{},

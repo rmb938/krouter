@@ -13,7 +13,7 @@ import (
 	v1 "github.com/rmb938/krouter/pkg/kafka/message/codec/init_producer_id/v1"
 	joinGroupV4 "github.com/rmb938/krouter/pkg/kafka/message/codec/join_group/v4"
 	leaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/codec/leave_group/v0"
-	listOffsetsV3 "github.com/rmb938/krouter/pkg/kafka/message/codec/list_offsets/v3"
+	listOffsetsV5 "github.com/rmb938/krouter/pkg/kafka/message/codec/list_offsets/v5"
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/codec/metadata/v8"
 	offsetCommitV4 "github.com/rmb938/krouter/pkg/kafka/message/codec/offset_commit/v4"
 	offsetFetchv4 "github.com/rmb938/krouter/pkg/kafka/message/codec/offset_fetch/v4"
@@ -39,7 +39,7 @@ import (
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group"
 	implLeaveGroupV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets"
-	implListOffsetsV3 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v3"
+	implListOffsetsV5 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v5"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
 	implMetadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/offset_commit"
@@ -83,7 +83,7 @@ var MessageDecoderMapping = map[int16]map[int16]message.Decoder{
 		implOffsetFetchv4.Version: &offsetFetchv4.Decoder{},
 	},
 	list_offsets.Key: {
-		implListOffsetsV3.Version: &listOffsetsV3.Decoder{},
+		implListOffsetsV5.Version: &listOffsetsV5.Decoder{},
 	},
 	fetch.Key: {
 		implFetchV11.Version: &fetchV11.Decoder{},
@@ -113,7 +113,7 @@ var MessageEncoderMapping = map[reflect.Type]message.Encoder{
 	reflect.TypeOf(implSyncGroupV0.Response{}):       &syncGroupV0.Encoder{},
 	reflect.TypeOf(implLeaveGroupV0.Response{}):      &leaveGroupV0.Encoder{},
 	reflect.TypeOf(implOffsetFetchv4.Response{}):     &offsetFetchv4.Encoder{},
-	reflect.TypeOf(implListOffsetsV3.Response{}):     &listOffsetsV3.Encoder{},
+	reflect.TypeOf(implListOffsetsV5.Response{}):     &listOffsetsV5.Encoder{},
 	reflect.TypeOf(implFetchV11.Response{}):          &fetchV11.Encoder{},
 	reflect.TypeOf(implHeartbeatV0.Response{}):       &heartbeatV0.Encoder{},
 	reflect.TypeOf(implOffsetCommitV4.Response{}):    &offsetCommitV4.Encoder{},

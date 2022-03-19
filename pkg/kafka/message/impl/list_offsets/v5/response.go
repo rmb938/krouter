@@ -1,4 +1,4 @@
-package v3
+package v5
 
 import (
 	"time"
@@ -11,6 +11,7 @@ type ListOffsetsPartitionResponse struct {
 	ErrCode        errors.KafkaError
 	Timestamp      time.Time
 	Offset         int64
+	LeaderEpoch    int32
 }
 
 type ListOffsetsTopicResponse struct {
