@@ -66,7 +66,7 @@ func (c *Cluster) initFranzKafkaClient(addrs []string) error {
 	var err error
 	c.franzKafkaClient, err = kgo.NewClient(
 		kgo.SeedBrokers(addrs...),
-		kgo.RequiredAcks(kgo.AllISRAcks()),
+		kgo.RequiredAcks(kgo.AllISRAcks()), // Required to support acks all, so let's just upgrade everyone
 		kgo.MaxVersions(maxVersions),
 	)
 	if err != nil {
@@ -83,13 +83,13 @@ func (c *Cluster) Close() error {
 }
 
 func (c *Cluster) GetTopics() map[string]*topics.Topic {
-	topics := map[string]*topics.Topic{}
+	clusterTopics := map[string]*topics.Topic{}
 
 	for name, value := range c.topics {
-		topics[name] = value.Clone()
+		clusterTopics[name] = value.Clone()
 	}
 
-	return topics
+	return clusterTopics
 }
 
 func (c *Cluster) GetTopic(name string) *topics.Topic {
