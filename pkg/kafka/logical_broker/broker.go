@@ -133,6 +133,10 @@ func (b *Broker) GetController() *Controller {
 	return b.controller
 }
 
+func (b *Broker) GetClusters() map[string]*Cluster {
+	return b.clusters
+}
+
 func (b *Broker) GetTopics() []*topics.Topic {
 	var allTopics []*topics.Topic
 

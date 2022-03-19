@@ -83,7 +83,6 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		}
 
 		for _, broker := range kafkaMetadata.Brokers {
-
 			if _, ok := uniqueBrokers[broker.NodeID]; !ok {
 				uniqueBrokers[broker.NodeID] = struct{}{}
 				response.Brokers = append(response.Brokers, metadatav8.Brokers{
@@ -120,20 +119,30 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		}
 	}
 
-	controllerKafkaMetadataResponse, err := logicalBroker.GetController().ClusterMetadata(context.TODO())
-	if err != nil {
-		log.Error(err, "error fetching metadata for controller from kafka")
-		return fmt.Errorf("error fetching metadata for controller from kafka: %w", err)
-	}
-	for _, kafkaMetadataBrokerResponse := range controllerKafkaMetadataResponse.Brokers {
-		if _, ok := uniqueBrokers[kafkaMetadataBrokerResponse.NodeID]; !ok {
-			uniqueBrokers[kafkaMetadataBrokerResponse.NodeID] = struct{}{}
-			response.Brokers = append(response.Brokers, metadatav8.Brokers{
-				ID:   kafkaMetadataBrokerResponse.NodeID,
-				Host: logicalBroker.AdvertiseListener.IP.String(),
-				Port: int32(logicalBroker.AdvertiseListener.Port),
-				Rack: func(s string) *string { return &s }("rack"),
-			})
+	// get metadata for all clusters
+	for _, cluster := range logicalBroker.GetClusters() {
+		if _, ok := uniqueClusters[cluster]; ok {
+			// if we already got it via topics skip it
+			continue
+		}
+
+		kafkaMetadata, err := cluster.TopicMetadata(context.TODO(), nil)
+		if err != nil {
+			log.Error(err, "error fetching metadata for brokers from kafka")
+			return fmt.Errorf("error fetching metadata for brokers from kafka: %w", err)
+		}
+
+		for _, broker := range kafkaMetadata.Brokers {
+
+			if _, ok := uniqueBrokers[broker.NodeID]; !ok {
+				uniqueBrokers[broker.NodeID] = struct{}{}
+				response.Brokers = append(response.Brokers, metadatav8.Brokers{
+					ID:   broker.NodeID,
+					Host: logicalBroker.AdvertiseListener.IP.String(),
+					Port: int32(logicalBroker.AdvertiseListener.Port),
+					Rack: func(s string) *string { return &s }("rack"),
+				})
+			}
 		}
 	}
 

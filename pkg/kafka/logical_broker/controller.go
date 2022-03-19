@@ -32,10 +32,6 @@ func NewController(log logr.Logger, cluster *Cluster) (*Controller, error) {
 	return &Controller{cluster: cluster}, nil
 }
 
-func (c *Controller) ClusterMetadata(ctx context.Context) (*kmsg.MetadataResponse, error) {
-	return c.cluster.TopicMetadata(ctx, []string{})
-}
-
 func (c *Controller) FindGroupCoordinator(consumerGroup string) (*kmsg.FindCoordinatorResponse, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
