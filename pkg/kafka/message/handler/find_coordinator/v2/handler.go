@@ -20,7 +20,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 	response.ThrottleDuration = 0
 	response.ErrCode = errors.None
 	response.ErrMessage = nil
-	response.NodeID = 1
+	response.NodeID = 2147483647
 	response.Host = broker.AdvertiseListener.IP.String()
 	response.Port = int32(broker.AdvertiseListener.Port)
 

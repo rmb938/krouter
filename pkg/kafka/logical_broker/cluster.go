@@ -15,6 +15,10 @@ import (
 	"github.com/twmb/franz-go/pkg/kmsg"
 )
 
+const (
+	ClusterTopicLeaderRedisKeyFmt = "cluster-%s-{topic-%s}-partition-%d-leader"
+)
+
 type Cluster struct {
 	Name string
 	log  logr.Logger
@@ -51,8 +55,6 @@ func NewCluster(name string, addrs []string, log logr.Logger, redisClient *redis
 	if err := cluster.initFranzKafkaClient(addrs); err != nil {
 		return nil, err
 	}
-
-	go cluster.refreshMetadataLoop()
 
 	return cluster, nil
 }
@@ -96,91 +98,7 @@ func (c *Cluster) initFranzKafkaClient(addrs []string) error {
 		return err
 	}
 
-	// TODO: franz doesn't have helper methods for topic partition leaders so we need to do our own with caching
-
 	return nil
-}
-
-func (c *Cluster) refreshMetadataLoop() {
-	_, err := c.refreshMetadata()
-	if err != nil {
-		c.log.Error(err, "error refreshing metadata")
-	}
-
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-c.metadataRefreshCtx.Done():
-			return
-		case <-ticker.C:
-		}
-
-		retry, err := c.refreshMetadata()
-		if err != nil {
-			c.log.Error(err, "error refreshing metadata")
-		}
-
-		if retry {
-			// TODO: retry something
-		}
-	}
-}
-
-func (c *Cluster) refreshMetadata() (bool, error) {
-	// TODO: redis distributed lock
-
-	c.log.Info("Refreshing metadata")
-
-	var retry bool
-	metadataRequest := kmsg.NewPtrMetadataRequest()
-	metadataRequest.AllowAutoTopicCreation = true
-	for name, _ := range c.topics {
-		metadataTopicRequest := kmsg.NewMetadataRequestTopic()
-		metadataTopicRequest.Topic = &name
-		metadataRequest.Topics = append(metadataRequest.Topics, metadataTopicRequest)
-	}
-
-	resp, err := c.franzKafkaClient.Request(context.TODO(), metadataRequest)
-	if err != nil {
-		return retry, err
-	}
-
-	metadataResponse := resp.(*kmsg.MetadataResponse)
-
-	redisPipeline := c.redisClient.Client.Pipeline()
-
-	for _, topic := range metadataResponse.Topics {
-
-		topicErr := topic.ErrorCode
-		if topicErr != int16(errors.None) {
-			retry = true
-		}
-
-		for _, partition := range topic.Partitions {
-
-			partitionErr := partition.ErrorCode
-			if partitionErr != int16(errors.None) {
-				retry = true
-			}
-
-			partitionIndex := partition.Partition
-			partitionLeader := partition.Leader
-
-			err := redisPipeline.Set(context.TODO(), fmt.Sprintf("{topic-%s}-partition-%d-leader", *topic.Topic, partitionIndex), partitionLeader, 15*time.Minute).Err()
-			if err != nil {
-				c.log.Error(err, "error setting partition leader in redis pipeline")
-			}
-		}
-	}
-
-	_, err = redisPipeline.Exec(context.TODO())
-	if err != nil {
-		return retry, fmt.Errorf("error execing redis pipeline: %w", err)
-	}
-
-	return retry, nil
 }
 
 func (c *Cluster) Close() error {
@@ -216,7 +134,7 @@ func (c *Cluster) RemoveTopic(topic *topics.Topic) {
 }
 
 func (c *Cluster) TopicLeader(ctx context.Context, topic string, partition int32) (int, error) {
-	brokerID, err := c.redisClient.Client.Get(ctx, fmt.Sprintf("{topic-%s}-partition-%d-leader", topic, partition)).Int()
+	brokerID, err := c.redisClient.Client.Get(ctx, fmt.Sprintf(ClusterTopicLeaderRedisKeyFmt, c.Name, topic, partition)).Int()
 	if err != nil {
 		if err == redis.Nil {
 			return -1, nil
@@ -225,6 +143,45 @@ func (c *Cluster) TopicLeader(ctx context.Context, topic string, partition int32
 	}
 
 	return brokerID, nil
+}
+
+func (c *Cluster) TopicMetadata(ctx context.Context, topics []string) (*kmsg.MetadataResponse, error) {
+
+	metadataRequest := kmsg.NewPtrMetadataRequest()
+	metadataRequest.AllowAutoTopicCreation = true
+	for _, topic := range topics {
+		metadataTopicRequest := kmsg.NewMetadataRequestTopic()
+		metadataTopicRequest.Topic = &topic
+		metadataRequest.Topics = append(metadataRequest.Topics, metadataTopicRequest)
+	}
+
+	resp, err := c.franzKafkaClient.Request(ctx, metadataRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	metadataResponse := resp.(*kmsg.MetadataResponse)
+
+	for _, topic := range metadataResponse.Topics {
+		if topic.ErrorCode != int16(errors.None) {
+			continue
+		}
+
+		for _, partition := range topic.Partitions {
+			if partition.ErrorCode != int16(errors.None) {
+				continue
+			}
+
+			// Clients typically refresh metadata every 10 minutes
+			// so expiring in an hour "should" be good enough
+			err := c.redisClient.Client.Set(ctx, fmt.Sprintf(ClusterTopicLeaderRedisKeyFmt, c.Name, *topic.Topic, partition.Partition), partition.Leader, 1*time.Hour).Err()
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return metadataResponse, nil
 }
 
 func (c *Cluster) FranzProduce(topic *topics.Topic, partition int32, transactionID *string, timeoutMillis int32, recordBytes []byte) (*kmsg.ProduceResponse, error) {
@@ -237,10 +194,8 @@ func (c *Cluster) FranzProduce(topic *topics.Topic, partition int32, transaction
 	}
 
 	if brokerID == -1 {
-		// Don't need to schedule metadata refresh
-		//  the client will look up metadata and that'll schedule the refresh
+		// can't find topic leader
 		return &kmsg.ProduceResponse{
-			ThrottleMillis: int32((15 * time.Second).Milliseconds()),
 			Topics: []kmsg.ProduceResponseTopic{
 				{
 					Topic: topic.Name,
@@ -272,28 +227,29 @@ func (c *Cluster) FranzProduce(topic *topics.Topic, partition int32, transaction
 		return nil, err
 	}
 
-	produceResponse := response.(*kmsg.ProduceResponse)
-	partitionResp := produceResponse.Topics[0].Partitions[0]
-
-	if partitionResp.ErrorCode == int16(errors.NotLeaderOrFollower) {
-		// TODO: schedule a metadata refresh
-		produceResponse.ThrottleMillis = int32((15 * time.Second).Milliseconds())
-	}
-
-	return produceResponse, nil
+	return response.(*kmsg.ProduceResponse), nil
 }
 
 func (c *Cluster) SaramaProduce(topic *topics.Topic, partition int32, request *sarama.ProduceRequest) (*sarama.ProduceResponse, error) {
-	broker, err := c.saramaKafkaClient.Leader(topic.Name, partition)
+	leaderID, err := c.TopicLeader(context.TODO(), topic.Name, partition)
 	if err != nil {
 		return nil, err
 	}
 
+	broker, err := c.saramaKafkaClient.Broker(int32(leaderID))
+	if err != nil {
+		return nil, err
+	}
 	return broker.Produce(request)
 }
 
 func (c *Cluster) ListOffsets(topic *topics.Topic, partition int32, request *sarama.OffsetRequest) (*sarama.OffsetResponse, error) {
-	broker, err := c.saramaKafkaClient.Leader(topic.Name, partition)
+	leaderID, err := c.TopicLeader(context.TODO(), topic.Name, partition)
+	if err != nil {
+		return nil, err
+	}
+
+	broker, err := c.saramaKafkaClient.Broker(int32(leaderID))
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +258,12 @@ func (c *Cluster) ListOffsets(topic *topics.Topic, partition int32, request *sar
 }
 
 func (c *Cluster) Fetch(topic *topics.Topic, partition int32, request *sarama.FetchRequest) (*sarama.FetchResponse, error) {
-	broker, err := c.saramaKafkaClient.Leader(topic.Name, partition)
+	leaderID, err := c.TopicLeader(context.TODO(), topic.Name, partition)
+	if err != nil {
+		return nil, err
+	}
+
+	broker, err := c.saramaKafkaClient.Broker(int32(leaderID))
 	if err != nil {
 		return nil, err
 	}
