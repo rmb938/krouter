@@ -25,7 +25,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 	} else {
 		broker := client.Broker
 
-		kafkaResponse, err := broker.GetController().FindCoordinator(request.Key)
+		kafkaResponse, err := broker.GetController().FindGroupCoordinator(request.Key)
 		if err != nil {
 			return err
 		}

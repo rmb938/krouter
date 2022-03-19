@@ -33,7 +33,7 @@ func (c *Controller) ClusterMetadata(ctx context.Context) (*kmsg.MetadataRespons
 	return c.cluster.TopicMetadata(ctx, []string{})
 }
 
-func (c *Controller) FindCoordinator(consumerGroup string) (*kmsg.FindCoordinatorResponse, error) {
+func (c *Controller) FindGroupCoordinator(consumerGroup string) (*kmsg.FindCoordinatorResponse, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
@@ -50,7 +50,7 @@ func (c *Controller) FindCoordinator(consumerGroup string) (*kmsg.FindCoordinato
 
 	if coordinatorResponse.ErrorCode == int16(errors.None) {
 		// Consumers don't actively refresh this
-		// so if this expires we should return errors.NotCoordinator and clients will try and FindCoordinator again
+		// so if this expires we should return errors.NotCoordinator and clients will try and FindGroupCoordinator again
 		err := c.cluster.redisClient.Client.Set(ctx, fmt.Sprintf(GroupCoordinatorRedisKeyFmt, consumerGroup), coordinatorResponse.NodeID, 1*time.Hour).Err()
 		if err != nil {
 			return nil, err
