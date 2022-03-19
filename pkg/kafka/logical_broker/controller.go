@@ -12,6 +12,11 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-redis/redis/v8"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
+	"github.com/twmb/franz-go/pkg/kmsg"
+)
+
+const (
+	GroupCoordinatorRedisKeyFmt = "{group-%s}-coordinator"
 )
 
 type Controller struct {
@@ -24,12 +29,62 @@ func NewController(log logr.Logger, cluster *Cluster) (*Controller, error) {
 	return &Controller{cluster: cluster}, nil
 }
 
-func (c *Controller) findCoordinator(consumerGroup string) (*sarama.Broker, error) {
-	return c.cluster.saramaKafkaClient.Coordinator(consumerGroup)
+func (c *Controller) ClusterMetadata(ctx context.Context) (*kmsg.MetadataResponse, error) {
+	return c.cluster.TopicMetadata(ctx, []string{})
+}
+
+func (c *Controller) FindCoordinator(consumerGroup string) (*kmsg.FindCoordinatorResponse, error) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	request := kmsg.NewPtrFindCoordinatorRequest()
+	request.CoordinatorType = 0
+	request.CoordinatorKey = consumerGroup
+
+	response, err := c.cluster.franzKafkaClient.Request(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	coordinatorResponse := response.(*kmsg.FindCoordinatorResponse)
+
+	if coordinatorResponse.ErrorCode == int16(errors.None) {
+		// Consumers don't actively refresh this
+		// so if this expires we should return errors.NotCoordinator and clients will try and FindCoordinator again
+		err := c.cluster.redisClient.Client.Set(ctx, fmt.Sprintf(GroupCoordinatorRedisKeyFmt, consumerGroup), coordinatorResponse.NodeID, 1*time.Hour).Err()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return coordinatorResponse, nil
+}
+
+func (c *Controller) groupCoordinator(ctx context.Context, consumerGroup string) (int, error) {
+	brokerID, err := c.cluster.redisClient.Client.Get(ctx, fmt.Sprintf(GroupCoordinatorRedisKeyFmt, consumerGroup)).Int()
+	if err != nil {
+		if err == redis.Nil {
+			return -1, nil
+		}
+		return -1, err
+	}
+
+	return brokerID, nil
 }
 
 func (c *Controller) JoinGroup(request *sarama.JoinGroupRequest) (*sarama.JoinGroupResponse, error) {
-	coordinatorBroker, err := c.findCoordinator(request.GroupId)
+	coordinatorId, err := c.groupCoordinator(context.TODO(), request.GroupId)
+	if err != nil {
+		return nil, err
+	}
+
+	if coordinatorId == -1 {
+		return &sarama.JoinGroupResponse{
+			Err: sarama.KError(errors.NotCoordinator),
+		}, nil
+	}
+
+	coordinatorBroker, err := c.cluster.saramaKafkaClient.Broker(int32(coordinatorId))
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +107,18 @@ func (c *Controller) JoinGroup(request *sarama.JoinGroupRequest) (*sarama.JoinGr
 }
 
 func (c *Controller) SyncGroup(request *sarama.SyncGroupRequest) (*sarama.SyncGroupResponse, error) {
-	coordinatorBroker, err := c.findCoordinator(request.GroupId)
+	coordinatorId, err := c.groupCoordinator(context.TODO(), request.GroupId)
+	if err != nil {
+		return nil, err
+	}
+
+	if coordinatorId == -1 {
+		return &sarama.SyncGroupResponse{
+			Err: sarama.KError(errors.NotCoordinator),
+		}, nil
+	}
+
+	coordinatorBroker, err := c.cluster.saramaKafkaClient.Broker(int32(coordinatorId))
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +127,18 @@ func (c *Controller) SyncGroup(request *sarama.SyncGroupRequest) (*sarama.SyncGr
 }
 
 func (c *Controller) LeaveGroup(request *sarama.LeaveGroupRequest) (*sarama.LeaveGroupResponse, error) {
-	coordinatorBroker, err := c.findCoordinator(request.GroupId)
+	coordinatorId, err := c.groupCoordinator(context.TODO(), request.GroupId)
+	if err != nil {
+		return nil, err
+	}
+
+	if coordinatorId == -1 {
+		return &sarama.LeaveGroupResponse{
+			Err: sarama.KError(errors.NotCoordinator),
+		}, nil
+	}
+
+	coordinatorBroker, err := c.cluster.saramaKafkaClient.Broker(int32(coordinatorId))
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +147,18 @@ func (c *Controller) LeaveGroup(request *sarama.LeaveGroupRequest) (*sarama.Leav
 }
 
 func (c *Controller) HeartBeat(request *sarama.HeartbeatRequest) (*sarama.HeartbeatResponse, error) {
-	coordinatorBroker, err := c.findCoordinator(request.GroupId)
+	coordinatorId, err := c.groupCoordinator(context.TODO(), request.GroupId)
+	if err != nil {
+		return nil, err
+	}
+
+	if coordinatorId == -1 {
+		return &sarama.HeartbeatResponse{
+			Err: sarama.KError(errors.NotCoordinator),
+		}, nil
+	}
+
+	coordinatorBroker, err := c.cluster.saramaKafkaClient.Broker(int32(coordinatorId))
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +291,23 @@ func (c *Controller) OffsetCommit(group, topic string, groupGenerationId, partit
 }
 
 func (c *Controller) DescribeGroup(group string) (*sarama.DescribeGroupsResponse, error) {
-	coordinatorBroker, err := c.findCoordinator(group)
+	coordinatorId, err := c.groupCoordinator(context.TODO(), group)
+	if err != nil {
+		return nil, err
+	}
+
+	if coordinatorId == -1 {
+		return &sarama.DescribeGroupsResponse{
+			Groups: []*sarama.GroupDescription{
+				{
+					Err:     sarama.KError(errors.NotCoordinator),
+					GroupId: group,
+				},
+			},
+		}, nil
+	}
+
+	coordinatorBroker, err := c.cluster.saramaKafkaClient.Broker(int32(coordinatorId))
 	if err != nil {
 		return nil, err
 	}

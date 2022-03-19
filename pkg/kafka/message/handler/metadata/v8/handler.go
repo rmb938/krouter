@@ -101,15 +101,33 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			response.Topics = append(response.Topics, responseTopic)
 		}
 	}
+
+	controllerKakfaMetadataResponse, err := logicalBroker.GetController().ClusterMetadata(context.TODO())
+	if err != nil {
+		log.Error(err, "error fetching metadata for controller from kafka")
+		return fmt.Errorf("error fetching metadata for controller from kafka: %w", err)
+	}
+	for _, kafkaMetadataBrokerResponse := range controllerKakfaMetadataResponse.Brokers {
+		if _, ok := uniqueBrokers[kafkaMetadataBrokerResponse.NodeID]; !ok {
+			uniqueBrokers[kafkaMetadataBrokerResponse.NodeID] = struct{}{}
+			response.Brokers = append(response.Brokers, metadatav8.Brokers{
+				ID:   kafkaMetadataBrokerResponse.NodeID,
+				Host: logicalBroker.AdvertiseListener.IP.String(),
+				Port: int32(logicalBroker.AdvertiseListener.Port),
+				Rack: func(s string) *string { return &s }("rack"),
+			})
+		}
+	}
+
+	response.ClusterID = &client.Broker.ClusterID
+	response.ControllerID = 2147483647
+
 	response.Brokers = append(response.Brokers, metadatav8.Brokers{
-		ID:   2147483647,
+		ID:   response.ControllerID,
 		Host: logicalBroker.AdvertiseListener.IP.String(),
 		Port: int32(logicalBroker.AdvertiseListener.Port),
 		Rack: func(s string) *string { return &s }("rack"),
 	})
-
-	response.ClusterID = &client.Broker.ClusterID
-	response.ControllerID = 2147483647
 
 	return client.WriteMessage(response, correlationId)
 }

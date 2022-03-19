@@ -28,6 +28,8 @@ func (d *Decoder) Decode(reader *codec.PackerReader) (message.Message, error) {
 
 			msg.Topics = append(msg.Topics, topicName)
 		}
+	} else {
+		msg.Topics = nil
 	}
 
 	if msg.AllowAutoTopicCreation, err = reader.Bool(); err != nil {

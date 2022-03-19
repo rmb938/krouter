@@ -133,7 +133,7 @@ func (c *Cluster) RemoveTopic(topic *topics.Topic) {
 	delete(c.topics, topic.Name)
 }
 
-func (c *Cluster) TopicLeader(ctx context.Context, topic string, partition int32) (int, error) {
+func (c *Cluster) topicLeader(ctx context.Context, topic string, partition int32) (int, error) {
 	brokerID, err := c.redisClient.Client.Get(ctx, fmt.Sprintf(ClusterTopicLeaderRedisKeyFmt, c.Name, topic, partition)).Int()
 	if err != nil {
 		if err == redis.Nil {
@@ -188,7 +188,7 @@ func (c *Cluster) Produce(topic *topics.Topic, partition int32, transactionID *s
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	leaderID, err := c.TopicLeader(ctx, topic.Name, partition)
+	leaderID, err := c.topicLeader(ctx, topic.Name, partition)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +234,7 @@ func (c *Cluster) ListOffsets(topic *topics.Topic, partition int32, request *kms
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	leaderID, err := c.TopicLeader(ctx, topic.Name, partition)
+	leaderID, err := c.topicLeader(ctx, topic.Name, partition)
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +268,7 @@ func (c *Cluster) Fetch(topic *topics.Topic, partition int32, request *kmsg.Fetc
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	leaderID, err := c.TopicLeader(ctx, topic.Name, partition)
+	leaderID, err := c.topicLeader(ctx, topic.Name, partition)
 	if err != nil {
 		return nil, err
 	}
