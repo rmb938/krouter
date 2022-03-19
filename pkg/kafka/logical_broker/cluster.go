@@ -10,7 +10,6 @@ import (
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker/topics"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group"
-	implSyncGroupV3 "github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group/v3"
 	"github.com/rmb938/krouter/pkg/redisw"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
@@ -61,7 +60,8 @@ func (c *Cluster) initFranzKafkaClient(addrs []string) error {
 	// pull maxVersions
 	maxVersions := kversion.Stable()
 	// need to pin the max version of sync_group due to protocol setting in newer versions
-	maxVersions.SetMaxKeyVersion(sync_group.Key, implSyncGroupV3.Version)
+	// we support version 3, version 4 just adds tagged fields
+	maxVersions.SetMaxKeyVersion(sync_group.Key, 4)
 
 	var err error
 	c.franzKafkaClient, err = kgo.NewClient(
