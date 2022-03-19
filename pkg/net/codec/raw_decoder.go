@@ -197,17 +197,17 @@ func (pd *RawDecoder) ArrayLength() (int32, error) {
 	return pd.Int32()
 }
 
-func (pd *RawDecoder) NullableArrayLength() (int32, error) {
+func (pd *RawDecoder) NullableArrayLength() (*int32, error) {
 	length, err := pd.Int32()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	if length < 0 {
-		return 0, nil
+		return nil, nil
 	}
 
-	return length, nil
+	return &length, nil
 }
 
 func (pd *RawDecoder) CompactArrayLength() (uint64, error) {

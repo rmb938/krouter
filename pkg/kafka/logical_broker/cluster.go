@@ -149,6 +149,7 @@ func (c *Cluster) TopicMetadata(ctx context.Context, topics []string) (*kmsg.Met
 
 	metadataRequest := kmsg.NewPtrMetadataRequest()
 	metadataRequest.AllowAutoTopicCreation = true
+	metadataRequest.Topics = make([]kmsg.MetadataRequestTopic, 0)
 	for _, topic := range topics {
 		metadataTopicRequest := kmsg.NewMetadataRequestTopic()
 		metadataTopicRequest.Topic = &topic

@@ -30,18 +30,21 @@ func (d *Decoder) Decode(reader *codec.PackerReader) (message.Message, error) {
 			return nil, err
 		}
 
-		var configLength int32
+		resource.ConfigurationKeys = nil
+		var configLength *int32
 		if configLength, err = reader.NullableArrayLength(); err != nil {
 			return nil, err
 		}
 
-		for i := int32(0); i < configLength; i++ {
-			var configKey string
-			if configKey, err = reader.String(); err != nil {
-				return nil, err
-			}
+		if configLength != nil {
+			for i := int32(0); i < *configLength; i++ {
+				var configKey string
+				if configKey, err = reader.String(); err != nil {
+					return nil, err
+				}
 
-			resource.ConfigurationKeys = append(resource.ConfigurationKeys, configKey)
+				resource.ConfigurationKeys = append(resource.ConfigurationKeys, configKey)
+			}
 		}
 
 		msg.Resources = append(msg.Resources, resource)

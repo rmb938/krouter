@@ -21,6 +21,8 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 
 	response := &v5.Response{}
 
+	log.Info("listing offsets")
+
 	for _, requestTopic := range request.Topics {
 		topicResponse := v5.ListOffsetsTopicResponse{
 			Name: requestTopic.Name,
@@ -77,6 +79,8 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 
 		response.Topics = append(response.Topics, topicResponse)
 	}
+
+	log.Info("list offsets", "resp", *response)
 
 	return client.WriteMessage(response, correlationId)
 }

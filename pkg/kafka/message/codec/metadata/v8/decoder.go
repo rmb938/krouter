@@ -15,12 +15,18 @@ func (d *Decoder) Decode(reader *codec.PackerReader) (message.Message, error) {
 
 	msg := &v8.Request{}
 
-	topicsLength, err := reader.ArrayLength()
+	msg.Topics = nil
+	topicsLength, err := reader.NullableArrayLength()
 	if err != nil {
 		return nil, err
 	}
-	if topicsLength > 0 {
-		for i := int32(0); i < topicsLength; i++ {
+	// TODO: we shouldn't need *topicsLength > 0 however when running
+	//  kafka-consumer-groups.sh it errors with Timed out waiting for a node assignment. Call: listOffsets on broker X
+	//  according to docs a length of = 0 means return no topics while nil means return all topics
+	//  but this seems to be wrong?
+	if topicsLength != nil && *topicsLength > 0 {
+		msg.Topics = make([]string, 0)
+		for i := int32(0); i < *topicsLength; i++ {
 			topicName, err := reader.String()
 			if err != nil {
 				return nil, err
@@ -28,8 +34,6 @@ func (d *Decoder) Decode(reader *codec.PackerReader) (message.Message, error) {
 
 			msg.Topics = append(msg.Topics, topicName)
 		}
-	} else {
-		msg.Topics = nil
 	}
 
 	if msg.AllowAutoTopicCreation, err = reader.Bool(); err != nil {

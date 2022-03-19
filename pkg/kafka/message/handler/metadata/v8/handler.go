@@ -28,10 +28,28 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 
 	uniqueClusters := make(map[*logical_broker.Cluster][]string)
 
-	for _, topicName := range request.Topics {
+	topics := request.Topics
+
+	response.ClusterID = &logicalBroker.ClusterID
+	response.ControllerID = 2147483647
+
+	response.Brokers = append(response.Brokers, metadatav8.Brokers{
+		ID:   response.ControllerID,
+		Host: logicalBroker.AdvertiseListener.IP.String(),
+		Port: int32(logicalBroker.AdvertiseListener.Port),
+		Rack: func(s string) *string { return &s }("rack"),
+	})
+
+	if request.Topics == nil {
+		for _, topic := range logicalBroker.GetTopics() {
+			topics = append(topics, topic.Name)
+		}
+	}
+
+	for _, topicName := range topics {
 		log = log.WithValues("topic", topicName)
 
-		cluster, _ := client.Broker.GetTopic(topicName)
+		cluster, _ := logicalBroker.GetTopic(topicName)
 
 		if cluster == nil {
 			log.Error(nil, "Client tried to get metadata for a topic that doesn't exist")
@@ -102,12 +120,12 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		}
 	}
 
-	controllerKakfaMetadataResponse, err := logicalBroker.GetController().ClusterMetadata(context.TODO())
+	controllerKafkaMetadataResponse, err := logicalBroker.GetController().ClusterMetadata(context.TODO())
 	if err != nil {
 		log.Error(err, "error fetching metadata for controller from kafka")
 		return fmt.Errorf("error fetching metadata for controller from kafka: %w", err)
 	}
-	for _, kafkaMetadataBrokerResponse := range controllerKakfaMetadataResponse.Brokers {
+	for _, kafkaMetadataBrokerResponse := range controllerKafkaMetadataResponse.Brokers {
 		if _, ok := uniqueBrokers[kafkaMetadataBrokerResponse.NodeID]; !ok {
 			uniqueBrokers[kafkaMetadataBrokerResponse.NodeID] = struct{}{}
 			response.Brokers = append(response.Brokers, metadatav8.Brokers{
@@ -118,16 +136,6 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			})
 		}
 	}
-
-	response.ClusterID = &client.Broker.ClusterID
-	response.ControllerID = 2147483647
-
-	response.Brokers = append(response.Brokers, metadatav8.Brokers{
-		ID:   response.ControllerID,
-		Host: logicalBroker.AdvertiseListener.IP.String(),
-		Port: int32(logicalBroker.AdvertiseListener.Port),
-		Rack: func(s string) *string { return &s }("rack"),
-	})
 
 	return client.WriteMessage(response, correlationId)
 }

@@ -42,7 +42,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			continue
 		}
 
-		if len(resource.ConfigurationKeys) > 0 {
+		if resource.ConfigurationKeys != nil {
 			for _, configName := range resource.ConfigurationKeys {
 				if configValue, ok := topic.Config[configName]; ok {
 					configResult := v0.DescribeConfigResultConfigResponse{
