@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"github.com/rmb938/krouter/pkg/kafka/client"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	v4 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch/v4"
 	"github.com/rmb938/krouter/pkg/net/message"
@@ -13,7 +13,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
+func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("offset-fetch-v5-handler")
 
 	request := message.(*v4.Request)
@@ -29,7 +29,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			Name: requestTopic.Name,
 		}
 
-		_, topic := client.Broker.GetTopic(requestTopic.Name)
+		_, topic := broker.GetTopic(requestTopic.Name)
 
 		for _, partitionIndex := range requestTopic.PartitionIndexes {
 			offsetFetchTopicPartition := v4.ResponseOffsetFetchTopicPartition{
@@ -50,10 +50,10 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 				continue
 			}
 
-			offset, err := client.Broker.GetController().OffsetFetch(request.GroupID, topic.Name, partitionIndex)
+			offset, err := broker.GetController().OffsetFetch(request.GroupID, topic.Name, partitionIndex)
 			if err != nil {
 				log.Error(err, "error fetching offsets to controller")
-				return fmt.Errorf("error fetching offsets to controller: %w", err)
+				return nil, fmt.Errorf("error fetching offsets to controller: %w", err)
 			}
 
 			if offsetFetchTopicPartition.ErrCode == errors.None {
@@ -67,10 +67,10 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 	}
 
 	if len(request.Topics) == 0 {
-		offsets, err := client.Broker.GetController().OffsetFetchAllTopics(request.GroupID)
+		offsets, err := broker.GetController().OffsetFetchAllTopics(request.GroupID)
 		if err != nil {
 			log.Error(err, "error fetching offsets for all topics to controller")
-			return fmt.Errorf("error fetching offsets for all topics to controller: %w", err)
+			return nil, fmt.Errorf("error fetching offsets for all topics to controller: %w", err)
 		}
 
 		for topicName, partitionInfo := range offsets {
@@ -91,5 +91,5 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		}
 	}
 
-	return client.WriteMessage(response, correlationId)
+	return response, nil
 }

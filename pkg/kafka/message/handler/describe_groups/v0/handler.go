@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"github.com/rmb938/krouter/pkg/kafka/client"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	v0 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_groups/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	"github.com/rmb938/krouter/pkg/net/message"
@@ -13,7 +13,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
+func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("describe-groups-v0-handler")
 
 	request := message.(*v0.Request)
@@ -28,10 +28,10 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			GroupID: group,
 		}
 
-		kafkaResponseDescribeGroup, err := client.Broker.GetController().DescribeGroup(group)
+		kafkaResponseDescribeGroup, err := broker.GetController().DescribeGroup(group)
 		if err != nil {
 			log.Error(err, "Error describing group to controller")
-			return fmt.Errorf("error describing group to controller: %w", err)
+			return nil, fmt.Errorf("error describing group to controller: %w", err)
 		}
 
 		kafkaResponseGroup := kafkaResponseDescribeGroup.Groups[0]
@@ -53,5 +53,5 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		response.Groups = append(response.Groups, responseGroup)
 	}
 
-	return client.WriteMessage(response, correlationId)
+	return response, nil
 }

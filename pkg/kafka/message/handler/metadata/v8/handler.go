@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/rmb938/krouter/pkg/kafka/client"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
@@ -16,13 +15,13 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
+func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("metadata-v8-handler")
 
 	request := message.(*metadatav8.Request)
 	response := &metadatav8.Response{}
 
-	logicalBroker := client.Broker
+	logicalBroker := broker
 
 	response.ThrottleDuration = 0
 
@@ -75,7 +74,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		kafkaMetadata, err := cluster.TopicMetadata(context.TODO(), topics)
 		if err != nil {
 			log.Error(err, "error fetching metadata for topics from kafka")
-			return fmt.Errorf("error fetching metadata for topics from kafka: %w", err)
+			return nil, fmt.Errorf("error fetching metadata for topics from kafka: %w", err)
 		}
 
 		if int64(kafkaMetadata.ThrottleMillis) > response.ThrottleDuration.Milliseconds() {
@@ -129,7 +128,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		kafkaMetadata, err := cluster.TopicMetadata(context.TODO(), nil)
 		if err != nil {
 			log.Error(err, "error fetching metadata for brokers from kafka")
-			return fmt.Errorf("error fetching metadata for brokers from kafka: %w", err)
+			return nil, fmt.Errorf("error fetching metadata for brokers from kafka: %w", err)
 		}
 
 		for _, broker := range kafkaMetadata.Brokers {
@@ -146,5 +145,5 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		}
 	}
 
-	return client.WriteMessage(response, correlationId)
+	return response, nil
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"github.com/rmb938/krouter/pkg/kafka/client"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	v4 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_commit/v4"
 	"github.com/rmb938/krouter/pkg/net/message"
@@ -13,7 +13,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
+func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("offset-commit-v4-handler")
 	request := message.(*v4.Request)
 
@@ -26,7 +26,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			Name: requestTopic.Name,
 		}
 
-		_, topic := client.Broker.GetTopic(requestTopic.Name)
+		_, topic := broker.GetTopic(requestTopic.Name)
 
 		for _, requestPartition := range requestTopic.Partitions {
 			partitionResponse := v4.OffsetCommitPartitionResponse{
@@ -46,10 +46,10 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 				continue
 			}
 
-			kafkaErr, err := client.Broker.GetController().OffsetCommit(request.GroupID, topic.Name, request.GenerationID, requestPartition.PartitionIndex, requestPartition.CommittedOffset)
+			kafkaErr, err := broker.GetController().OffsetCommit(request.GroupID, topic.Name, request.GenerationID, requestPartition.PartitionIndex, requestPartition.CommittedOffset)
 			if err != nil {
 				log.Error(err, "Error offset commit to controller")
-				return fmt.Errorf("error offset commit to backend cluster: %w", err)
+				return nil, fmt.Errorf("error offset commit to backend cluster: %w", err)
 			}
 
 			partitionResponse.ErrCode = kafkaErr
@@ -59,5 +59,5 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		response.Topics = append(response.Topics, topicResponse)
 	}
 
-	return client.WriteMessage(response, correlationId)
+	return response, nil
 }

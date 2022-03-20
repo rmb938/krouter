@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/rmb938/krouter/pkg/kafka/client"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	v3 "github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group/v3"
 	"github.com/rmb938/krouter/pkg/net/message"
@@ -15,7 +15,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
+func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("leave-group-v0-handler")
 	request := message.(*v3.Request)
 
@@ -33,10 +33,10 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		kafkaLeaveGroupRequest.Members = append(kafkaLeaveGroupRequest.Members, kafkaLeaveGroupRequestMember)
 	}
 
-	kafkaLeaveGroupResponse, err := client.Broker.GetController().LeaveGroup(kafkaLeaveGroupRequest)
+	kafkaLeaveGroupResponse, err := broker.GetController().LeaveGroup(kafkaLeaveGroupRequest)
 	if err != nil {
 		log.Error(err, "Error leaving group to controller")
-		return fmt.Errorf("error leaving group to backend cluster: %w", err)
+		return nil, fmt.Errorf("error leaving group to backend cluster: %w", err)
 	}
 
 	response.ThrottleDuration = time.Duration(kafkaLeaveGroupResponse.ThrottleMillis) * time.Millisecond
@@ -50,5 +50,5 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		})
 	}
 
-	return client.WriteMessage(response, correlationId)
+	return response, nil
 }

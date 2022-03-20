@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/rmb938/krouter/pkg/kafka/client"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	v5 "github.com/rmb938/krouter/pkg/kafka/message/impl/join_group/v5"
 	"github.com/twmb/franz-go/pkg/kmsg"
@@ -16,7 +16,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
+func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("join-group-v4-handler")
 
 	request := message.(*v5.Request)
@@ -41,10 +41,10 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		kafkaJoinGroupRequest.Protocols = append(kafkaJoinGroupRequest.Protocols, kafkaJoinGroupRequestProtocol)
 	}
 
-	kafkaJoinGroupResponse, err := client.Broker.GetController().JoinGroup(kafkaJoinGroupRequest)
+	kafkaJoinGroupResponse, err := broker.GetController().JoinGroup(kafkaJoinGroupRequest)
 	if err != nil {
 		log.Error(err, "Error joining group to backend cluster")
-		return fmt.Errorf("error joining group to controller: %w", err)
+		return nil, fmt.Errorf("error joining group to controller: %w", err)
 	}
 
 	if int64(kafkaJoinGroupResponse.ThrottleMillis) > response.ThrottleDuration.Milliseconds() {
@@ -70,5 +70,5 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		})
 	}
 
-	return client.WriteMessage(response, correlationId)
+	return response, nil
 }

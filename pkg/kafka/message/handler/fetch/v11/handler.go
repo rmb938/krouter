@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/rmb938/krouter/pkg/kafka/client"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	v11 "github.com/rmb938/krouter/pkg/kafka/message/impl/fetch/v11"
 	"github.com/rmb938/krouter/pkg/net/message"
@@ -16,7 +16,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
+func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("fetch-v11-handler")
 
 	request := message.(*v11.Request)
@@ -39,7 +39,7 @@ topicLoop:
 			Topic: requestedTopic.Name,
 		}
 
-		cluster, topic := client.Broker.GetTopic(requestedTopic.Name)
+		cluster, topic := broker.GetTopic(requestedTopic.Name)
 
 		for _, partition := range requestedTopic.Partitions {
 			log = log.WithValues("partition", partition.Partition)
@@ -86,7 +86,7 @@ topicLoop:
 			kafkaFetchResponse, err := cluster.Fetch(topic, partition.Partition, kafkaFetchRequest)
 			if err != nil {
 				log.Error(err, "Error fetch to backend cluster")
-				return fmt.Errorf("error fetchto backend cluster: %w", err)
+				return nil, fmt.Errorf("error fetchto backend cluster: %w", err)
 			}
 
 			if int64(kafkaFetchResponse.ThrottleMillis) > response.ThrottleDuration.Milliseconds() {
@@ -129,5 +129,5 @@ topicLoop:
 		response.Responses = append(response.Responses, topicResponse)
 	}
 
-	return client.WriteMessage(response, correlationId)
+	return response, nil
 }

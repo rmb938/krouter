@@ -18,9 +18,8 @@ func NewPacketBuilder(key int16, version int16) *PacketBuilder {
 
 func (builder *PacketBuilder) ToPacket() *Packet {
 	return &Packet{
-		ReqHeader: nil,
-		Key:       &builder.key,
-		Version:   &builder.version,
-		Data:      builder.Encoder.Buff,
+		Key:     &builder.key,
+		Version: &builder.version,
+		Data:    builder.Encoder.Buff,
 	}
 }

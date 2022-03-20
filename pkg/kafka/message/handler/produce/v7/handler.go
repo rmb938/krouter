@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/rmb938/krouter/pkg/kafka/client"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	v7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
 	"github.com/rmb938/krouter/pkg/net/message"
@@ -14,8 +14,8 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
-	log = log.WithName("franz-produce-v7-handler")
+func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
+	log = log.WithName("produce-v7-handler")
 	request := message.(*v7.Request)
 
 	response := &v7.Response{}
@@ -26,7 +26,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			Name: topicData.Name,
 		}
 
-		cluster, topic := client.Broker.GetTopic(topicData.Name)
+		cluster, topic := broker.GetTopic(topicData.Name)
 
 		for _, partitionData := range topicData.PartitionData {
 			log = log.WithValues("partition", partitionData.Index)
@@ -54,7 +54,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			kafkaResponse, err := cluster.Produce(topic, partitionData.Index, request.TransactionalID, int32(request.TimeoutDuration.Milliseconds()), partitionData.Records)
 			if err != nil {
 				log.Error(err, "Error producing message to backend cluster")
-				return fmt.Errorf("error producing to kafka: %w", err)
+				return nil, fmt.Errorf("error producing to kafka: %w", err)
 			}
 
 			if int64(kafkaResponse.ThrottleMillis) > response.ThrottleDuration.Milliseconds() {
@@ -73,5 +73,5 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		response.Responses = append(response.Responses, produceResponse)
 	}
 
-	return client.WriteMessage(response, correlationId)
+	return response, nil
 }

@@ -5,7 +5,6 @@ import (
 	"net"
 
 	"github.com/go-logr/logr"
-
 	"github.com/rmb938/krouter/pkg/kafka/client"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 )
@@ -13,7 +12,8 @@ import (
 type Router struct {
 	Log logr.Logger
 
-	packetProcessor *PacketProcessor
+	packetProcessor *client.RequestPacketProcessor
+	requestHandler  *client.RequestPacketHandler
 	listener        net.Listener
 
 	broker *logical_broker.Broker
@@ -22,8 +22,12 @@ type Router struct {
 func (r *Router) ListenAndServe(listener, advertiseListener *net.TCPAddr, clusterID string, redisAddresses []string) error {
 	r.Log.Info("Starting Router")
 
-	r.packetProcessor = &PacketProcessor{
+	r.packetProcessor = &client.RequestPacketProcessor{
 		Log: r.Log.WithName("packet-processor"),
+	}
+
+	r.requestHandler = &client.RequestPacketHandler{
+		Log: r.Log.WithName("request-handler"),
 	}
 
 	var err error
@@ -63,17 +67,7 @@ func (r *Router) serverLoop() error {
 		log.V(1).Info("Accepted Connection")
 
 		c := client.NewClient(r.Log.WithName("client"), r.broker, conn)
-		go func() {
-			defer c.Close()
-
-			for {
-				err := r.packetProcessor.processPacket(c)
-				if err != nil {
-					log.Error(err, "error processing packet")
-					break
-				}
-			}
-		}()
+		go c.Run(r.packetProcessor, r.requestHandler)
 	}
 
 	// TODO: wait for all clients to become idle (or timeout reached) then close brokers

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/rmb938/krouter/pkg/kafka/client"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	v3 "github.com/rmb938/krouter/pkg/kafka/message/impl/heartbeat/v3"
 	"github.com/rmb938/krouter/pkg/net/message"
@@ -15,7 +15,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
+func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("heartbeat-v0-handler")
 
 	request := message.(*v3.Request)
@@ -30,10 +30,10 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 	kafkaHeartbeatRequest.MemberID = request.MemberID
 	kafkaHeartbeatRequest.InstanceID = request.GroupInstanceId
 
-	kafkaHeartbeatResponse, err := client.Broker.GetController().HeartBeat(kafkaHeartbeatRequest)
+	kafkaHeartbeatResponse, err := broker.GetController().HeartBeat(kafkaHeartbeatRequest)
 	if err != nil {
 		log.Error(err, "Error heartbeat to backend cluster")
-		return fmt.Errorf("error heartbeat to controller: %w", err)
+		return nil, fmt.Errorf("error heartbeat to controller: %w", err)
 	}
 
 	response.ThrottleDuration = time.Duration(kafkaHeartbeatResponse.ThrottleMillis) * time.Millisecond
@@ -44,5 +44,5 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		}
 	}
 
-	return client.WriteMessage(response, correlationId)
+	return response, nil
 }

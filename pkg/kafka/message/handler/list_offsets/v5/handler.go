@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/rmb938/krouter/pkg/kafka/client"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	v5 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v5"
 	"github.com/rmb938/krouter/pkg/net/message"
@@ -15,7 +15,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
+func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("list-offsets-v5-handler")
 	request := message.(*v5.Request)
 
@@ -26,7 +26,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			Name: requestTopic.Name,
 		}
 
-		cluster, topic := client.Broker.GetTopic(requestTopic.Name)
+		cluster, topic := broker.GetTopic(requestTopic.Name)
 
 		for _, partition := range requestTopic.Partitions {
 			partitionResponse := v5.ListOffsetsPartitionResponse{
@@ -57,7 +57,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			kafkaOffsetResponse, err := cluster.ListOffsets(topic, partition.PartitionIndex, kafkaOffsetRequest)
 			if err != nil {
 				log.Error(err, "error listing offsets to backend cluster")
-				return fmt.Errorf("error listing offsets to backend cluster: %w", err)
+				return nil, fmt.Errorf("error listing offsets to backend cluster: %w", err)
 			}
 
 			if kafkaOffsetResponse != nil {
@@ -78,5 +78,5 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		response.Topics = append(response.Topics, topicResponse)
 	}
 
-	return client.WriteMessage(response, correlationId)
+	return response, nil
 }

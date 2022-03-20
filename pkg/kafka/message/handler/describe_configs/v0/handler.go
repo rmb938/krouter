@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/rmb938/krouter/pkg/kafka/client"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	v0 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_configs/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	"github.com/rmb938/krouter/pkg/net/message"
@@ -13,7 +13,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(client *client.Client, log logr.Logger, message message.Message, correlationId int32) error {
+func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
 	request := message.(*v0.Request)
 
 	response := &v0.Response{}
@@ -33,7 +33,7 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 			continue
 		}
 
-		_, topic := client.Broker.GetTopic(result.ResourceName)
+		_, topic := broker.GetTopic(result.ResourceName)
 
 		if topic == nil {
 			result.ErrCode = errors.UnknownTopicOrPartition
@@ -73,5 +73,5 @@ func (h *Handler) Handle(client *client.Client, log logr.Logger, message message
 		response.Results = append(response.Results, result)
 	}
 
-	return client.WriteMessage(response, correlationId)
+	return response, nil
 }
