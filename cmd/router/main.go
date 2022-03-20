@@ -1,16 +1,17 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net"
 	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/go-logr/zapr"
+	"github.com/rmb938/krouter/apiServer"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -35,11 +36,13 @@ func main() {
 	var clusterID string
 	var listener string
 	var advertiseListener string
+	var apiListener string
 	var redisAddressesFlag MultiFlag
 
 	flag.StringVar(&clusterID, "cluster-id", "some-cluster-id", "The Kafka cluster ID")
 	flag.StringVar(&listener, "listener", "127.0.0.1:29092", "The address to listener on")
 	flag.StringVar(&advertiseListener, "advertise-listener", "localhost:29092", "The address to advertise to clients")
+	flag.StringVar(&apiListener, "api-listener", "127.0.0.1:6060", "The api address to listener on")
 	flag.Var(&redisAddressesFlag, "redis-addresses", "List of redis addresses (default \"localhost:6379\")")
 
 	flag.Parse()
@@ -76,26 +79,36 @@ func main() {
 		os.Exit(1)
 	}
 
-	r := &router.Router{
-		Log: logr.WithName("router"),
+	kafkaRouter, err := router.NewRouter(logr.WithName("router"), listenerAddr, advertiseListenerAddr, clusterID, redisAddresses)
+	if err != nil {
+		setupLog.Error(err, "error creating router")
+		os.Exit(1)
 	}
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	api := apiServer.NewAPIServer(logr.WithName("api-server"), apiListener, kafkaRouter.Broker)
+
 	go func() {
-		fmt.Println(http.ListenAndServe("localhost:6060", nil))
+		if err := api.ListenAndServe(); err != http.ErrServerClosed {
+			setupLog.Error(err, "error running api listener")
+			sigChan <- nil
+		}
 	}()
 
 	go func() {
-		err = r.ListenAndServe(listenerAddr, advertiseListenerAddr, clusterID, redisAddresses)
+		err = kafkaRouter.ListenAndServe()
 		if err != nil {
 			setupLog.Error(err, "error starting router")
 			sigChan <- nil
 		}
 	}()
 	<-sigChan
-	if err := r.Shutdown(); err != nil {
+	if err := api.Shutdown(context.TODO()); err != nil {
+		setupLog.Error(err, "Error shutting down api server")
+	}
+	if err := kafkaRouter.Shutdown(); err != nil {
 		setupLog.Error(err, "Error shutting down router")
 	}
 }

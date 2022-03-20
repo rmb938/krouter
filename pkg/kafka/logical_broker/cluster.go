@@ -123,7 +123,7 @@ func (c *Cluster) topicLeader(ctx context.Context, topic string, partition int32
 func (c *Cluster) TopicMetadata(ctx context.Context, topics []string) (*kmsg.MetadataResponse, error) {
 
 	metadataRequest := kmsg.NewPtrMetadataRequest()
-	metadataRequest.AllowAutoTopicCreation = true
+	metadataRequest.AllowAutoTopicCreation = false // don't allow topic creation
 	metadataRequest.Topics = make([]kmsg.MetadataRequestTopic, 0)
 	for _, topic := range topics {
 		metadataTopicRequest := kmsg.NewMetadataRequestTopic()

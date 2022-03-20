@@ -10,66 +10,65 @@ import (
 )
 
 type Router struct {
-	Log logr.Logger
+	log logr.Logger
 
 	packetProcessor *client.RequestPacketProcessor
 	requestHandler  *client.RequestPacketHandler
 	listener        net.Listener
 
-	broker *logical_broker.Broker
+	Broker *logical_broker.Broker
 }
 
-func (r *Router) ListenAndServe(listener, advertiseListener *net.TCPAddr, clusterID string, redisAddresses []string) error {
-	r.Log.Info("Starting Router")
+func NewRouter(log logr.Logger, listener, advertiseListener *net.TCPAddr, clusterID string, redisAddresses []string) (*Router, error) {
+	r := &Router{log: log}
 
 	r.packetProcessor = &client.RequestPacketProcessor{
-		Log: r.Log.WithName("packet-processor"),
+		Log: r.log.WithName("packet-processor"),
 	}
 
 	r.requestHandler = &client.RequestPacketHandler{
-		Log: r.Log.WithName("request-handler"),
+		Log: r.log.WithName("request-handler"),
 	}
 
 	var err error
 	r.listener, err = net.Listen("tcp", listener.String())
 	if err != nil {
-		return fmt.Errorf("error creating listener %w", err)
+		return nil, fmt.Errorf("error creating listener %w", err)
 	}
-	defer r.listener.Close()
 
-	r.broker, err = logical_broker.InitBroker(r.Log, advertiseListener, clusterID, redisAddresses)
+	r.Broker, err = logical_broker.InitBroker(r.log, advertiseListener, clusterID, redisAddresses)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	err = r.broker.InitClusters()
+	err = r.Broker.InitClusters()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return r.serverLoop()
+	return r, nil
 }
 
-func (r *Router) Shutdown() error {
-	// TODO: do something here to stop the serverLoop
-	return nil
-}
-
-func (r *Router) serverLoop() error {
+func (r *Router) ListenAndServe() error {
+	r.log.Info("Starting Router")
 	for {
 		conn, err := r.listener.Accept()
 		if err != nil {
 			return err
 		}
 
-		log := r.Log.WithValues("from-address", conn.RemoteAddr().String())
+		log := r.log.WithValues("from-address", conn.RemoteAddr().String())
 
 		log.V(1).Info("Accepted Connection")
 
-		c := client.NewClient(r.Log.WithName("client"), r.broker, conn)
+		c := client.NewClient(r.log.WithName("client"), r.Broker, conn)
 		go c.Run(r.packetProcessor, r.requestHandler)
 	}
 
 	// TODO: wait for all clients to become idle (or timeout reached) then close brokers
-	return r.broker.Close()
+	return r.Broker.Close()
+}
+
+func (r *Router) Shutdown() error {
+	return r.listener.Close()
 }

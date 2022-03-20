@@ -12,6 +12,7 @@ require (
 	github.com/klauspost/compress v1.14.4
 	github.com/pierrec/lz4 v2.6.1+incompatible
 	github.com/twmb/franz-go v1.4.0
+	github.com/twmb/franz-go/pkg/kadm v0.0.0-20220319065723-845bc50e6da0
 	github.com/twmb/franz-go/pkg/kmsg v0.0.0-20220310045829-806cf534caf0
 	go.uber.org/zap v1.14.1
 )

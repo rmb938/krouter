@@ -77,17 +77,7 @@ func (b *Broker) registerCluster(name string, addrs []string) (*Cluster, error) 
 func (b *Broker) InitClusters() error {
 	// TODO: load from config or env vars
 
-	cluster, err := b.registerCluster("controller", []string{"localhost:19093"})
-	if err != nil {
-		return err
-	}
-
-	b.controller, err = NewController(b.log, cluster)
-	if err != nil {
-		return err
-	}
-
-	cluster, err = b.registerCluster("cluster1", []string{"localhost:9093"})
+	cluster, err := b.registerCluster("cluster1", []string{"localhost:9093"})
 	if err != nil {
 		return err
 	}
@@ -97,7 +87,6 @@ func (b *Broker) InitClusters() error {
 		Name:       "test1",
 		Partitions: 1,
 		Config:     nil,
-		Enabled:    true,
 	})
 
 	cluster, err = b.registerCluster("cluster2", []string{"localhost:9094"})
@@ -110,7 +99,6 @@ func (b *Broker) InitClusters() error {
 		Name:       "test2",
 		Partitions: 1,
 		Config:     nil,
-		Enabled:    true,
 	})
 
 	cluster, err = b.registerCluster("cluster3", []string{"localhost:9392"})
@@ -123,8 +111,17 @@ func (b *Broker) InitClusters() error {
 		Name:       "test3",
 		Partitions: 1,
 		Config:     nil,
-		Enabled:    true,
 	})
+
+	cluster, err = b.registerCluster("controller", []string{"localhost:19093"})
+	if err != nil {
+		return err
+	}
+
+	b.controller, err = NewController(b.log, cluster)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -151,7 +148,7 @@ func (b *Broker) GetTopics() []*topics.Topic {
 
 func (b *Broker) GetTopic(name string) (*Cluster, *topics.Topic) {
 	for _, cluster := range b.clusters {
-		if topic := cluster.GetTopic(name); topic != nil && topic.Enabled {
+		if topic := cluster.GetTopic(name); topic != nil {
 			return cluster, topic
 		}
 	}
