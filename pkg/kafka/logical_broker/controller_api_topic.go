@@ -25,7 +25,7 @@ func (c *Controller) APISetTopicPointer(topicName string, cluster *Cluster) erro
 			return err
 		}
 		if exists != 0 {
-			return fmt.Errorf("topic %s already exists", topicName)
+			return fmt.Errorf("topic %s pointer already exists", topicName)
 		}
 
 		exists, err = tx.Exists(ctx, clusterTopicRedisKey).Result()
@@ -49,6 +49,28 @@ func (c *Controller) APISetTopicPointer(topicName string, cluster *Cluster) erro
 	return nil
 }
 
+func (c *Controller) APIGetTopicPointer(topicName string) (*string, error) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	var pointer string
+	topicRedisKey := fmt.Sprintf(TopicConfigRedisKeyFmt, topicName)
+	err := c.cluster.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
+		var err error
+		pointer, err = tx.Get(ctx, topicRedisKey).Result()
+		if err == redis.Nil {
+			return nil
+		}
+
+		return err
+	}, topicRedisKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pointer, nil
+}
+
 func (c *Controller) APIDeleteTopicPointer(topicName string) error {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
@@ -61,7 +83,7 @@ func (c *Controller) APIDeleteTopicPointer(topicName string) error {
 			return err
 		}
 		if exists == 0 {
-			return fmt.Errorf("topic %s does not exist", topicName)
+			return fmt.Errorf("topic %s pointer does not exist", topicName)
 		}
 
 		_, err = tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {

@@ -98,7 +98,6 @@ func (b *Broker) InitClusters() error {
 			return err
 		}
 	}
-	b.log.Info("Topic", "topic", topic)
 
 	cluster, err = b.registerCluster("cluster2", []string{"localhost:9094"})
 	if err != nil {
@@ -143,19 +142,35 @@ func (b *Broker) InitClusters() error {
 	}
 
 	// TODO: remove this it's temporary
-	err = b.controller.APISetTopicPointer("test1", b.clusters["cluster1"])
+	pointer, err := b.controller.APIGetTopicPointer("test1")
 	if err != nil {
 		return err
 	}
-
-	err = b.controller.APISetTopicPointer("test2", b.clusters["cluster2"])
+	if pointer == nil {
+		err = b.controller.APISetTopicPointer("test1", b.clusters["cluster1"])
+		if err != nil {
+			return err
+		}
+	}
+	pointer, err = b.controller.APIGetTopicPointer("test2")
 	if err != nil {
 		return err
 	}
-
-	err = b.controller.APISetTopicPointer("test3", b.clusters["cluster3"])
+	if pointer == nil {
+		err = b.controller.APISetTopicPointer("test2", b.clusters["cluster2"])
+		if err != nil {
+			return err
+		}
+	}
+	pointer, err = b.controller.APIGetTopicPointer("test3")
 	if err != nil {
 		return err
+	}
+	if pointer == nil {
+		err = b.controller.APISetTopicPointer("test3", b.clusters["cluster3"])
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
