@@ -16,6 +16,7 @@ func (c *Controller) APISetTopicPointer(topicName string, cluster *Cluster) erro
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
+	clusterTopicRedisKey := fmt.Sprintf(TopicConfigClusterRedisKeyFmt, cluster.Name, topicName)
 	topicRedisKey := fmt.Sprintf(TopicConfigRedisKeyFmt, topicName)
 	err := c.cluster.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
 
@@ -27,8 +28,16 @@ func (c *Controller) APISetTopicPointer(topicName string, cluster *Cluster) erro
 			return fmt.Errorf("topic %s already exists", topicName)
 		}
 
+		exists, err = tx.Exists(ctx, clusterTopicRedisKey).Result()
+		if err != nil {
+			return err
+		}
+		if exists == 0 {
+			return fmt.Errorf("cluster topic %s does not exist", topicName)
+		}
+
 		_, err = tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			return pipeliner.Set(ctx, topicRedisKey, fmt.Sprintf(TopicConfigClusterRedisKeyFmt, cluster.Name, topicName), 0).Err()
+			return pipeliner.Set(ctx, topicRedisKey, clusterTopicRedisKey, 0).Err()
 		})
 
 		return err

@@ -18,7 +18,7 @@ const (
 	TopicConfigClusterRedisKeyFmt       = TopicConfigClusterRedisKeyFmtPrefix + "-%s-" + TopicConfigClusterRedisKeyFmtSuffix
 )
 
-func (c *Cluster) APICreateTopic(topicName string, partitions int32, config map[string]*string) (*topics.Topic, error) {
+func (c *Cluster) APICreateTopic(topicName string, partitions int32, replicationFactor int16, config map[string]*string) (*topics.Topic, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
@@ -34,7 +34,7 @@ func (c *Cluster) APICreateTopic(topicName string, partitions int32, config map[
 		}
 
 		adminClient := kadm.NewClient(c.franzKafkaClient)
-		resp, err := adminClient.CreateTopics(ctx, partitions, 3, config, topicName)
+		resp, err := adminClient.CreateTopics(ctx, partitions, replicationFactor, config, topicName)
 		if err != nil {
 			return err
 		}
@@ -71,18 +71,14 @@ func (c *Cluster) APICreateTopic(topicName string, partitions int32, config map[
 }
 
 func (c *Cluster) apiParseTopic(ctx context.Context, tx *redis.Tx, topicName string) (*topics.Topic, error) {
-
 	topicRedisKey := fmt.Sprintf(TopicConfigClusterRedisKeyFmt, c.Name, topicName)
-	cmd, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-		return pipeliner.HGetAll(ctx, topicRedisKey).Err()
-	})
+	data, err := tx.HGetAll(ctx, topicRedisKey).Result()
 	if err != nil {
 		return nil, err
 	}
 
-	data, err := cmd[0].(*redis.StringStringMapCmd).Result()
-	if err != nil {
-		return nil, err
+	if len(data) == 0 {
+		return nil, redis.Nil
 	}
 
 	partitions, _ := strconv.Atoi(data["partitions"])
@@ -115,7 +111,7 @@ func (c *Cluster) APIGetTopic(topicName string) (*topics.Topic, error) {
 		topic, err = c.apiParseTopic(ctx, tx, topicName)
 		if err != nil {
 			if err == redis.Nil {
-				return fmt.Errorf("topic %s does not exist", topicName)
+				return nil
 			}
 			return err
 		}
@@ -200,6 +196,7 @@ func (c *Cluster) APIUpdateTopic(topicName string, partitions int32, config map[
 		}
 
 		hashValues := map[string]interface{}{
+			"name":       topic.Name,
 			"partitions": partitions,
 		}
 

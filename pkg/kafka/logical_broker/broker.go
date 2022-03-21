@@ -86,15 +86,50 @@ func (b *Broker) InitClusters() error {
 	if err != nil {
 		return err
 	}
+	// TODO: remove this it's temporary
+	topic, err := cluster.APIGetTopic("test1")
+	if err != nil {
+		return err
+	}
+	if topic == nil {
+		b.log.Info("Creating topic")
+		_, err := cluster.APICreateTopic("test1", 1, 1, map[string]*string{})
+		if err != nil {
+			return err
+		}
+	}
+	b.log.Info("Topic", "topic", topic)
 
 	cluster, err = b.registerCluster("cluster2", []string{"localhost:9094"})
 	if err != nil {
 		return err
 	}
+	// TODO: remove this it's temporary
+	topic, err = cluster.APIGetTopic("test2")
+	if err != nil {
+		return err
+	}
+	if topic == nil {
+		_, err := cluster.APICreateTopic("test2", 1, 1, map[string]*string{})
+		if err != nil {
+			return err
+		}
+	}
 
 	cluster, err = b.registerCluster("cluster3", []string{"localhost:9392"})
 	if err != nil {
 		return err
+	}
+	// TODO: remove this it's temporary
+	topic, err = cluster.APIGetTopic("test3")
+	if err != nil {
+		return err
+	}
+	if topic == nil {
+		_, err := cluster.APICreateTopic("test3", 1, 3, map[string]*string{})
+		if err != nil {
+			return err
+		}
 	}
 
 	cluster, err = b.registerCluster("controller", []string{"localhost:19093"})
@@ -103,6 +138,22 @@ func (b *Broker) InitClusters() error {
 	}
 
 	b.controller, err = NewController(b.log, cluster)
+	if err != nil {
+		return err
+	}
+
+	// TODO: remove this it's temporary
+	err = b.controller.APISetTopicPointer("test1", b.clusters["cluster1"])
+	if err != nil {
+		return err
+	}
+
+	err = b.controller.APISetTopicPointer("test2", b.clusters["cluster2"])
+	if err != nil {
+		return err
+	}
+
+	err = b.controller.APISetTopicPointer("test3", b.clusters["cluster3"])
 	if err != nil {
 		return err
 	}
@@ -175,15 +226,7 @@ func (b *Broker) GetTopic(name string) (*Cluster, *topics.Topic, error) {
 	var topic *topics.Topic
 	topicRedisKey := fmt.Sprintf(TopicConfigRedisKeyFmt, name)
 	err := b.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {
-		cmd, err := tx.TxPipelined(redisContext, func(pipeliner redis.Pipeliner) error {
-			return pipeliner.Get(redisContext, topicRedisKey).Err()
-		})
-		if err != nil {
-			return err
-		}
-		pointerCmdOutput := cmd[0].(*redis.StringCmd)
-
-		pointer, err := pointerCmdOutput.Result()
+		pointer, err := tx.Get(redisContext, topicRedisKey).Result()
 		if err == redis.Nil {
 			return nil
 		}
