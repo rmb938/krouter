@@ -26,7 +26,11 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 			Name: requestTopic.Name,
 		}
 
-		cluster, topic := broker.GetTopic(requestTopic.Name)
+		cluster, topic, err := broker.GetTopic(requestTopic.Name)
+		if err != nil {
+			log.Error(err, "error getting topic from logical broker")
+			return nil, fmt.Errorf("error getting topic from logical broker: %w", err)
+		}
 
 		for _, partition := range requestTopic.Partitions {
 			partitionResponse := v5.ListOffsetsPartitionResponse{

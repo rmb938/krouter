@@ -13,18 +13,17 @@ import (
 )
 
 const (
-	TopicConfigClusterRedisKeyFmtPrefix = "{topic-config}-cluster-%s"
-	TopicConfigClusterRedisKeyFmt       = TopicConfigClusterRedisKeyFmtPrefix + "-topic-%s"
-	TopicConfigRedisKeyFmt              = "{topic-config}-topic-%s"
+	TopicConfigClusterRedisKeyFmtPrefix = "{topic-config}-cluster"
+	TopicConfigClusterRedisKeyFmtSuffix = "topic-%s"
+	TopicConfigClusterRedisKeyFmt       = TopicConfigClusterRedisKeyFmtPrefix + "-%s-" + TopicConfigClusterRedisKeyFmtSuffix
 )
 
-func (c *Controller) CreateTopic(topicName string, partitions int32, config map[string]*string, primaryCluster *Cluster) (*topics.Topic, error) {
+func (c *Cluster) APICreateTopic(topicName string, partitions int32, config map[string]*string) (*topics.Topic, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	topicClusterRedisKey := fmt.Sprintf(TopicConfigClusterRedisKeyFmt, primaryCluster.Name, topicName)
-	topicRedisKey := fmt.Sprintf(TopicConfigRedisKeyFmt, topicName)
-	err := c.cluster.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
+	topicRedisKey := fmt.Sprintf(TopicConfigClusterRedisKeyFmt, c.Name, topicName)
+	err := c.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
 
 		exists, err := tx.Exists(ctx, topicRedisKey).Result()
 		if err != nil {
@@ -34,7 +33,7 @@ func (c *Controller) CreateTopic(topicName string, partitions int32, config map[
 			return fmt.Errorf("topic %s already exists", topicName)
 		}
 
-		adminClient := kadm.NewClient(primaryCluster.franzKafkaClient)
+		adminClient := kadm.NewClient(c.franzKafkaClient)
 		resp, err := adminClient.CreateTopics(ctx, partitions, 3, config, topicName)
 		if err != nil {
 			return err
@@ -45,8 +44,7 @@ func (c *Controller) CreateTopic(topicName string, partitions int32, config map[
 		}
 
 		hashValues := map[string]interface{}{
-			"partitions":      partitions,
-			"primary.cluster": primaryCluster.Name,
+			"partitions": partitions,
 		}
 
 		for configKey, configValue := range config {
@@ -54,51 +52,41 @@ func (c *Controller) CreateTopic(topicName string, partitions int32, config map[
 		}
 
 		_, err = tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			pipeliner.HSet(ctx, topicClusterRedisKey, hashValues)
-			pipeliner.HSet(ctx, topicRedisKey, hashValues)
-			return nil
+			return pipeliner.HSet(ctx, topicRedisKey, hashValues).Err()
 		})
 
 		return err
-	}, topicClusterRedisKey, topicRedisKey)
+	}, topicRedisKey)
 	if err != nil {
 		return nil, err
 	}
 
 	topic := &topics.Topic{
-		Name:           topicName,
-		Partitions:     partitions,
-		Config:         config,
-		PrimaryCluster: primaryCluster.Name,
+		Name:       topicName,
+		Partitions: partitions,
+		Config:     config,
 	}
 
 	return topic, nil
 }
 
-func (c *Controller) GetTopic(topicName string) (*topics.Topic, error) {
-	ctx, cancel := context.WithCancel(context.TODO())
-	defer cancel()
+func (c *Cluster) apiParseTopic(ctx context.Context, tx *redis.Tx, topicName string) (*topics.Topic, error) {
 
-	var topic *topics.Topic
-	err := c.cluster.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
-		var err error
-		topic, err = c.parseTopic(ctx, tx, topicName)
-		return err
+	topicRedisKey := fmt.Sprintf(TopicConfigClusterRedisKeyFmt, c.Name, topicName)
+	cmd, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+		return pipeliner.HGetAll(ctx, topicRedisKey).Err()
 	})
+	if err != nil {
+		return nil, err
+	}
 
-	return topic, err
-}
-
-func (c *Controller) parseTopic(ctx context.Context, tx *redis.Tx, topicName string) (*topics.Topic, error) {
-	topicRedisKey := fmt.Sprintf(TopicConfigRedisKeyFmt, topicName)
-	data, err := tx.HGetAll(ctx, topicRedisKey).Result()
+	data, err := cmd[0].(*redis.StringStringMapCmd).Result()
 	if err != nil {
 		return nil, err
 	}
 
 	partitions, _ := strconv.Atoi(data["partitions"])
 	config := make(map[string]*string)
-	primaryCluster := data["primary.cluster"]
 
 	for key, value := range data {
 		if strings.HasPrefix(key, "config.") {
@@ -108,23 +96,23 @@ func (c *Controller) parseTopic(ctx context.Context, tx *redis.Tx, topicName str
 	}
 
 	topic := &topics.Topic{
-		Name:           topicName,
-		Partitions:     int32(partitions),
-		Config:         config,
-		PrimaryCluster: primaryCluster,
+		Name:       topicName,
+		Partitions: int32(partitions),
+		Config:     config,
 	}
 
 	return topic, nil
 }
 
-func (c *Controller) UpdateTopic(topicName string, partitions int32, config map[string]*string, primaryCluster *Cluster) (*topics.Topic, error) {
+func (c *Cluster) APIGetTopic(topicName string) (*topics.Topic, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	topicClusterRedisKey := fmt.Sprintf(TopicConfigClusterRedisKeyFmt, primaryCluster.Name, topicName)
-	topicRedisKey := fmt.Sprintf(TopicConfigRedisKeyFmt, topicName)
-	err := c.cluster.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
-		topic, err := c.parseTopic(ctx, tx, topicName)
+	var topic *topics.Topic
+	topicRedisKey := fmt.Sprintf(TopicConfigClusterRedisKeyFmt, c.Name, topicName)
+	err := c.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
+		var err error
+		topic, err = c.apiParseTopic(ctx, tx, topicName)
 		if err != nil {
 			if err == redis.Nil {
 				return fmt.Errorf("topic %s does not exist", topicName)
@@ -132,8 +120,28 @@ func (c *Controller) UpdateTopic(topicName string, partitions int32, config map[
 			return err
 		}
 
-		adminClient := kadm.NewClient(primaryCluster.franzKafkaClient)
-		if topic.Partitions != partitions {
+		return nil
+	}, topicRedisKey)
+
+	return topic, err
+}
+
+func (c *Cluster) APIUpdateTopic(topicName string, partitions int32, config map[string]*string) (*topics.Topic, error) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	topicRedisKey := fmt.Sprintf(TopicConfigRedisKeyFmt, topicName)
+	err := c.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
+		topic, err := c.apiParseTopic(ctx, tx, topicName)
+		if err != nil {
+			if err == redis.Nil {
+				return fmt.Errorf("topic %s does not exist", topicName)
+			}
+			return err
+		}
+
+		adminClient := kadm.NewClient(c.franzKafkaClient)
+		if topic.Partitions > partitions {
 			// update partitions
 			resp, err := adminClient.UpdatePartitions(ctx, int(partitions), topicName)
 			if err != nil {
@@ -142,6 +150,8 @@ func (c *Controller) UpdateTopic(topicName string, partitions int32, config map[
 			if err := resp[topicName].Err; err != nil {
 				return fmt.Errorf("error from kafka while updating partitions: %w", err)
 			}
+		} else if topic.Partitions < partitions {
+			return fmt.Errorf("cannot decrease topic partitions")
 		}
 
 		// calculate config to update
@@ -190,8 +200,7 @@ func (c *Controller) UpdateTopic(topicName string, partitions int32, config map[
 		}
 
 		hashValues := map[string]interface{}{
-			"partitions":      partitions,
-			"primary.cluster": primaryCluster.Name,
+			"partitions": partitions,
 		}
 
 		for configKey, configValue := range config {
@@ -199,36 +208,32 @@ func (c *Controller) UpdateTopic(topicName string, partitions int32, config map[
 		}
 
 		_, err = tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			pipeliner.HSet(ctx, topicClusterRedisKey, hashValues)
-			pipeliner.HSet(ctx, topicRedisKey, hashValues)
-			return nil
+			return pipeliner.HSet(ctx, topicRedisKey, hashValues).Err()
 		})
 
 		return err
-	}, topicClusterRedisKey, topicRedisKey)
+	}, topicRedisKey)
 	if err != nil {
 		return nil, err
 	}
 
 	topic := &topics.Topic{
-		Name:           topicName,
-		Partitions:     partitions,
-		Config:         config,
-		PrimaryCluster: primaryCluster.Name,
+		Name:       topicName,
+		Partitions: partitions,
+		Config:     config,
 	}
 
 	return topic, nil
 }
 
-func (c *Controller) DeleteTopic(topicName string, primaryCluster *Cluster) error {
+func (c *Cluster) APIDeleteTopicCluster(topicName string) error {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	topicClusterRedisKey := fmt.Sprintf(TopicConfigClusterRedisKeyFmt, primaryCluster.Name, topicName)
-	topicRedisKey := fmt.Sprintf(TopicConfigRedisKeyFmt, topicName)
-	err := c.cluster.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
+	topicClusterRedisKey := fmt.Sprintf(TopicConfigClusterRedisKeyFmt, c.Name, topicName)
+	err := c.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
 
-		exists, err := tx.Exists(ctx, topicRedisKey).Result()
+		exists, err := tx.Exists(ctx, topicClusterRedisKey).Result()
 		if err != nil {
 			return err
 		}
@@ -236,7 +241,7 @@ func (c *Controller) DeleteTopic(topicName string, primaryCluster *Cluster) erro
 			return fmt.Errorf("topic %s does not exist", topicName)
 		}
 
-		adminClient := kadm.NewClient(primaryCluster.franzKafkaClient)
+		adminClient := kadm.NewClient(c.franzKafkaClient)
 		resp, err := adminClient.DeleteTopics(ctx, topicName)
 		if err != nil {
 			return err
@@ -248,13 +253,11 @@ func (c *Controller) DeleteTopic(topicName string, primaryCluster *Cluster) erro
 		}
 
 		_, err = tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			pipeliner.Del(ctx, topicClusterRedisKey)
-			pipeliner.Del(ctx, topicRedisKey)
-			return nil
+			return pipeliner.Del(ctx, topicClusterRedisKey).Err()
 		})
 
 		return err
-	}, topicClusterRedisKey, topicRedisKey)
+	}, topicClusterRedisKey)
 	if err != nil {
 		return err
 	}

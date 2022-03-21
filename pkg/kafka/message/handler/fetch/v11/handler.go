@@ -39,7 +39,11 @@ topicLoop:
 			Topic: requestedTopic.Name,
 		}
 
-		cluster, topic := broker.GetTopic(requestedTopic.Name)
+		cluster, topic, err := broker.GetTopic(requestedTopic.Name)
+		if err != nil {
+			log.Error(err, "error getting topic from logical broker")
+			return nil, fmt.Errorf("error getting topic from logical broker: %w", err)
+		}
 
 		for _, partition := range requestedTopic.Partitions {
 			log = log.WithValues("partition", partition.Partition)

@@ -30,8 +30,6 @@ type Cluster struct {
 	redisClient *redisw.RedisClient
 
 	franzKafkaClient *kgo.Client
-
-	topics map[string]*topics.Topic
 }
 
 func NewCluster(name string, addrs []string, log logr.Logger, redisClient *redisw.RedisClient) (*Cluster, error) {
@@ -45,7 +43,6 @@ func NewCluster(name string, addrs []string, log logr.Logger, redisClient *redis
 		redisClient:             redisClient,
 		metadatRefreshCtxCancel: metadatRefreshCtxCancel,
 		metadataRefreshCtx:      metadatRefreshCtx,
-		topics:                  map[string]*topics.Topic{},
 	}
 
 	if err := cluster.initFranzKafkaClient(addrs); err != nil {
@@ -80,32 +77,6 @@ func (c *Cluster) Close() error {
 	c.metadatRefreshCtxCancel()
 	c.franzKafkaClient.Close()
 	return nil
-}
-
-func (c *Cluster) GetTopics() map[string]*topics.Topic {
-	clusterTopics := map[string]*topics.Topic{}
-
-	for name, value := range c.topics {
-		clusterTopics[name] = value.Clone()
-	}
-
-	return clusterTopics
-}
-
-func (c *Cluster) GetTopic(name string) *topics.Topic {
-	if topic, ok := c.topics[name]; ok {
-		return topic.Clone()
-	}
-
-	return nil
-}
-
-func (c *Cluster) AddTopic(topic *topics.Topic) {
-	c.topics[topic.Name] = topic.Clone()
-}
-
-func (c *Cluster) RemoveTopic(topic *topics.Topic) {
-	delete(c.topics, topic.Name)
 }
 
 func (c *Cluster) topicLeader(ctx context.Context, topic string, partition int32) (int, error) {
@@ -160,45 +131,45 @@ func (c *Cluster) TopicMetadata(ctx context.Context, topics []string) (*kmsg.Met
 	return metadataResponse, nil
 }
 
-func (c *Cluster) Produce(topic *topics.Topic, partition int32, transactionID *string, timeoutMillis int32, recordBytes []byte) (*kmsg.ProduceResponse, error) {
+func (c *Cluster) Produce(transactionID *string, timeoutMillis int32, topics []kmsg.ProduceRequestTopic) (*kmsg.ProduceResponse, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	leaderID, err := c.topicLeader(ctx, topic.Name, partition)
+	// get leader from first topic since all topics and partitions in this request should be to the same leader
+	//  if our cache has the wrong one some (or all) of our topics will error and the client will refresh metadata
+	leaderID, err := c.topicLeader(ctx, topics[0].Topic, topics[0].Partitions[0].Partition)
 	if err != nil {
 		return nil, err
 	}
 
 	if leaderID == -1 {
-		// can't find topic partition leader
-		return &kmsg.ProduceResponse{
-			Topics: []kmsg.ProduceResponseTopic{
-				{
-					Topic: topic.Name,
-					Partitions: []kmsg.ProduceResponseTopicPartition{
-						{
-							Partition: partition,
-							ErrorCode: int16(errors.NotLeaderOrFollower),
-						},
-					},
-				},
-			},
-		}, nil
+		resp := kmsg.NewPtrProduceResponse()
+
+		for _, topic := range topics {
+			respTopic := kmsg.NewProduceResponseTopic()
+			respTopic.Topic = topic.Topic
+
+			for _, partition := range topic.Partitions {
+				respPartition := kmsg.NewProduceResponseTopicPartition()
+				respPartition.Partition = partition.Partition
+				respPartition.ErrorCode = int16(errors.NotLeaderOrFollower)
+
+				respTopic.Partitions = append(respTopic.Partitions, respPartition)
+			}
+
+			resp.Topics = append(resp.Topics, respTopic)
+		}
+
+		return resp, err
 	}
 
-	response, err := c.franzKafkaClient.Broker(leaderID).RetriableRequest(ctx, &kmsg.ProduceRequest{
+	req := &kmsg.ProduceRequest{
 		TransactionID: transactionID,
 		TimeoutMillis: timeoutMillis,
-		Topics: []kmsg.ProduceRequestTopic{{
-			Topic: topic.Name,
-			Partitions: []kmsg.ProduceRequestTopicPartition{
-				{
-					Partition: partition,
-					Records:   recordBytes,
-				},
-			},
-		}},
-	})
+		Topics:        topics,
+	}
+
+	response, err := c.franzKafkaClient.Broker(leaderID).RetriableRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}

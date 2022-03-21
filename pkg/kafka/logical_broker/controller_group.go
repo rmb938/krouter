@@ -178,12 +178,8 @@ func (c *Controller) HeartBeat(request *kmsg.HeartbeatRequest) (*kmsg.HeartbeatR
 				return nil
 			}
 
-			_, err = tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-				// TODO: make exp configurable
-				return pipeliner.Set(ctx, redisGroupGenerationKey, request.Generation, 7*24*time.Hour).Err()
-			})
-			return err
-		}, redisGroupGenerationKey)
+			return tx.Expire(ctx, redisGroupGenerationKey, 7*24*time.Hour).Err()
+		})
 	}
 
 	return heartBeatResponse, err
@@ -291,7 +287,7 @@ func (c *Controller) OffsetCommit(group, topic string, groupGenerationId, partit
 		})
 
 		return err
-	}, redisGroupGenerationKey)
+	}, redisGroupGenerationKey, redisGroupOffsetKey)
 
 	return kafkaError, err
 }

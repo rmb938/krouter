@@ -1,6 +1,7 @@
 package v0
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -14,6 +15,7 @@ type Handler struct {
 }
 
 func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
+	log = log.WithName("describe-configs-v0-handler")
 	request := message.(*v0.Request)
 
 	response := &v0.Response{}
@@ -33,7 +35,11 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 			continue
 		}
 
-		_, topic := broker.GetTopic(result.ResourceName)
+		_, topic, err := broker.GetTopic(result.ResourceName)
+		if err != nil {
+			log.Error(err, "error getting topic from logical broker")
+			return nil, fmt.Errorf("error getting topic from logical broker: %w", err)
+		}
 
 		if topic == nil {
 			result.ErrCode = errors.UnknownTopicOrPartition
