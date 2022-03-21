@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	ClusterTopicLeaderRedisKeyFmt = "cluster-%s-{topic-%s}-partition-%d-leader"
+	ClusterTopicLeaderRedisKeyFmt = "{cluster-%s-topic-partition-leader}-%s-partition-%d"
 )
 
 type Cluster struct {
