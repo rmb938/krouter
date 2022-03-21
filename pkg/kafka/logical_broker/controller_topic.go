@@ -13,13 +13,15 @@ import (
 )
 
 const (
-	TopicConfigRedisKeyFmt = "{topic-%s}-config"
+	ClusterTopicConfigRedisKeyFmt = "{cluster-%s}-topic-%s-config"
+	TopicConfigRedisKeyFmt        = "{topic-%s}-config"
 )
 
 func (c *Controller) CreateTopic(topicName string, partitions int32, config map[string]*string, primaryCluster *Cluster) (*topics.Topic, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
+	clusterTopicRedisKey := fmt.Sprintf(ClusterTopicConfigRedisKeyFmt, primaryCluster.Name, topicName)
 	topicRedisKey := fmt.Sprintf(TopicConfigRedisKeyFmt, topicName)
 	err := c.cluster.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
 
@@ -51,11 +53,13 @@ func (c *Controller) CreateTopic(topicName string, partitions int32, config map[
 		}
 
 		_, err = tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			return pipeliner.HSet(ctx, topicRedisKey, hashValues).Err()
+			pipeliner.HSet(ctx, clusterTopicRedisKey, hashValues)
+			pipeliner.HSet(ctx, topicRedisKey, hashValues)
+			return nil
 		})
 
 		return err
-	}, topicRedisKey)
+	}, clusterTopicRedisKey, topicRedisKey)
 	if err != nil {
 		return nil, err
 	}
@@ -116,6 +120,7 @@ func (c *Controller) UpdateTopic(topicName string, partitions int32, config map[
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
+	clusterTopicRedisKey := fmt.Sprintf(ClusterTopicConfigRedisKeyFmt, primaryCluster.Name, topicName)
 	topicRedisKey := fmt.Sprintf(TopicConfigRedisKeyFmt, topicName)
 	err := c.cluster.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
 		topic, err := c.parseTopic(ctx, tx, topicName)
@@ -193,11 +198,13 @@ func (c *Controller) UpdateTopic(topicName string, partitions int32, config map[
 		}
 
 		_, err = tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			return pipeliner.HSet(ctx, topicRedisKey, hashValues).Err()
+			pipeliner.HSet(ctx, clusterTopicRedisKey, hashValues)
+			pipeliner.HSet(ctx, topicRedisKey, hashValues)
+			return nil
 		})
 
 		return err
-	}, topicRedisKey)
+	}, clusterTopicRedisKey, topicRedisKey)
 	if err != nil {
 		return nil, err
 	}
@@ -216,6 +223,7 @@ func (c *Controller) DeleteTopic(topicName string, primaryCluster *Cluster) erro
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
+	clusterTopicRedisKey := fmt.Sprintf(ClusterTopicConfigRedisKeyFmt, primaryCluster.Name, topicName)
 	topicRedisKey := fmt.Sprintf(TopicConfigRedisKeyFmt, topicName)
 	err := c.cluster.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
 
@@ -239,11 +247,13 @@ func (c *Controller) DeleteTopic(topicName string, primaryCluster *Cluster) erro
 		}
 
 		_, err = tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			return pipeliner.Del(ctx, topicRedisKey).Err()
+			pipeliner.Del(ctx, clusterTopicRedisKey).Err()
+			pipeliner.Del(ctx, topicRedisKey)
+			return nil
 		})
 
 		return err
-	}, topicRedisKey)
+	}, clusterTopicRedisKey, topicRedisKey)
 	if err != nil {
 		return err
 	}
