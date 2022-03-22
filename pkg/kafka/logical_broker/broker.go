@@ -204,11 +204,11 @@ func (b *Broker) GetTopics() ([]*topics.Topic, error) {
 			}
 
 			topicData, err := tx.HGetAll(redisContext, pointer).Result()
-			if err == redis.Nil {
-				continue
-			}
 			if err != nil {
 				return err
+			}
+			if len(topicData) == 0 {
+				continue
 			}
 
 			partitions, _ := strconv.Atoi(topicData["partitions"])
@@ -253,11 +253,11 @@ func (b *Broker) GetTopic(name string) (*Cluster, *topics.Topic, error) {
 		cluster, _ = b.clusters[clusterName]
 
 		topicData, err := tx.HGetAll(redisContext, pointer).Result()
-		if err == redis.Nil {
-			return nil
-		}
 		if err != nil {
 			return err
+		}
+		if len(topicData) == 0 {
+			return nil
 		}
 
 		partitions, _ := strconv.Atoi(topicData["partitions"])
