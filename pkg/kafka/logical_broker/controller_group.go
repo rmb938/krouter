@@ -266,6 +266,9 @@ func (c *Controller) OffsetCommit(group, topic string, groupGenerationId, partit
 	redisContext, redisContextCancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer redisContextCancel()
 
+	// TODO: if resetting offsets do we need to check if the group is empty?
+	//  kafka java cli tools do it themselves but do we still need to check?
+
 	redisGroupGenerationKey := fmt.Sprintf(GroupGenerationRedisKeyFmt, group)
 	redisGroupOffsetKey := fmt.Sprintf(GroupTopicPartitionOffsetRedisKeyFmt, group, c.base64Topic(topic), partition)
 	err := c.cluster.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {

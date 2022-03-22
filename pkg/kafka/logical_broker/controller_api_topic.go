@@ -53,22 +53,27 @@ func (c *Controller) APIGetTopicPointer(topicName string) (*string, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	var pointer string
+	var pointer *string
 	topicRedisKey := fmt.Sprintf(TopicConfigRedisKeyFmt, topicName)
 	err := c.cluster.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
 		var err error
-		pointer, err = tx.Get(ctx, topicRedisKey).Result()
+		p, err := tx.Get(ctx, topicRedisKey).Result()
 		if err == redis.Nil {
 			return nil
 		}
+		if err != nil {
+			return err
+		}
 
-		return err
+		pointer = &p
+
+		return nil
 	}, topicRedisKey)
 	if err != nil {
 		return nil, err
 	}
 
-	return &pointer, nil
+	return pointer, nil
 }
 
 func (c *Controller) APIDeleteTopicPointer(topicName string) error {
