@@ -64,5 +64,9 @@ func (rh *RequestPacketHandler) HandleRequest(client *Client, inPacket *netCodec
 		return fmt.Errorf("error handling packet: %w", err)
 	}
 
+	if respMessage == nil {
+		return nil
+	}
+
 	return client.WriteMessage(respMessage, inPacket.ReqHeader.CorrelationId)
 }
