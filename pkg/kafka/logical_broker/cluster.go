@@ -23,8 +23,9 @@ type Cluster struct {
 	Name string
 	log  logr.Logger
 
-	syncedOnce sync.Once
-	syncedChan chan struct{}
+	topicConfigSyncedOnce sync.Once
+	topicLeaderSyncedOnce sync.Once
+	syncedChan            chan struct{}
 
 	controller *Controller
 
@@ -76,6 +77,8 @@ func (c *Cluster) initFranzKafkaClient(addrs []string) error {
 }
 
 func (c *Cluster) WaitSynced() {
+	// Two loads, one for topic configs and one for leaders
+	<-c.syncedChan
 	<-c.syncedChan
 }
 

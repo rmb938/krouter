@@ -158,7 +158,7 @@ func (b *Broker) InitClusters() error {
 	if topic == nil {
 		_, err := cluster1.APICreateTopic("test1", 1, 1, map[string]*string{})
 		if err != nil {
-			return err
+			return fmt.Errorf("err creating topic test1: %w", err)
 		}
 	}
 
@@ -170,7 +170,7 @@ func (b *Broker) InitClusters() error {
 	if topic == nil {
 		_, err := cluster2.APICreateTopic("test2", 1, 1, map[string]*string{})
 		if err != nil {
-			return err
+			return fmt.Errorf("err creating topic test2: %w", err)
 		}
 	}
 
@@ -182,7 +182,7 @@ func (b *Broker) InitClusters() error {
 	if topic == nil {
 		_, err := cluster3.APICreateTopic("test3", 1, 3, map[string]*string{})
 		if err != nil {
-			return err
+			return fmt.Errorf("err creating topic test3: %w", err)
 		}
 	}
 

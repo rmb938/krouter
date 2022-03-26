@@ -79,7 +79,7 @@ func (c *Cluster) ConsumeTopicLeaders() {
 				}
 			}
 
-			c.shouldBeSynced(highWaterMarks, lowWaterMarks)
+			c.shouldBeSynced(&c.topicLeaderSyncedOnce, highWaterMarks, lowWaterMarks)
 		}
 	}
 }

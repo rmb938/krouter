@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"sync"
 
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker/topics"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -90,12 +91,12 @@ func (c *Cluster) ConsumeTopicConfigs() {
 				}
 			}
 
-			c.shouldBeSynced(highWaterMarks, lowWaterMarks)
+			c.shouldBeSynced(&c.topicConfigSyncedOnce, highWaterMarks, lowWaterMarks)
 		}
 	}
 }
 
-func (c *Cluster) shouldBeSynced(highWaterMarks, lowWaterMarks map[int32]int64) {
+func (c *Cluster) shouldBeSynced(once *sync.Once, highWaterMarks, lowWaterMarks map[int32]int64) {
 	synced := true
 	for partitionIndex, highMark := range highWaterMarks {
 		if lowMark, ok := lowWaterMarks[partitionIndex]; ok {
@@ -106,7 +107,7 @@ func (c *Cluster) shouldBeSynced(highWaterMarks, lowWaterMarks map[int32]int64) 
 	}
 
 	if synced {
-		c.syncedOnce.Do(func() {
+		once.Do(func() {
 			c.syncedChan <- struct{}{}
 		})
 	}

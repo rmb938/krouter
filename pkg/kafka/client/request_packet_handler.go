@@ -18,7 +18,7 @@ type RequestPacketHandler struct {
 func (rh *RequestPacketHandler) HandleRequest(client *Client, inPacket *netCodec.Packet) error {
 	packetReader := netCodec.NewPacketReader(inPacket)
 
-	log := rh.Log.WithValues("request_api_key", inPacket.ReqHeader.Key, "request_api_version", inPacket.ReqHeader.Version, "correlation_id", inPacket.ReqHeader.CorrelationId)
+	log := rh.Log.WithValues("from-address", client.conn.RemoteAddr().String(), "request_api_key", inPacket.ReqHeader.Key, "request_api_version", inPacket.ReqHeader.Version, "correlation_id", inPacket.ReqHeader.CorrelationId)
 
 	decoderMap, ok := codec.MessageDecoderMapping[inPacket.ReqHeader.Key]
 	if !ok {
@@ -58,7 +58,7 @@ func (rh *RequestPacketHandler) HandleRequest(client *Client, inPacket *netCodec
 	}
 
 	// TODO: figure out throttling stuff
-	log.Info("handling packet")
+	log.V(1).Info("handling packet")
 	respMessage, err := inHandler.Handle(client.Broker, log, reqMessage)
 	if err != nil {
 		return fmt.Errorf("error handling packet: %w", err)
