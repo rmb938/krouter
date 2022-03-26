@@ -58,7 +58,7 @@ func (rh *RequestPacketHandler) HandleRequest(client *Client, inPacket *netCodec
 	}
 
 	// TODO: figure out throttling stuff
-	log.V(1).Info("handling packet")
+	log.Info("handling packet")
 	respMessage, err := inHandler.Handle(client.Broker, log, reqMessage)
 	if err != nil {
 		return fmt.Errorf("error handling packet: %w", err)

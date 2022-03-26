@@ -1,15 +1,14 @@
-package v8
+package v1
 
 import (
 	"context"
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
-	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
+	metadatav1 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v1"
 	"github.com/rmb938/krouter/pkg/net/message"
 )
 
@@ -19,21 +18,18 @@ type Handler struct {
 func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("metadata-v8-handler")
 
-	request := message.(*metadatav8.Request)
-	response := &metadatav8.Response{}
+	request := message.(*metadatav1.Request)
+	response := &metadatav1.Response{}
 
 	logicalBroker := broker
-
-	response.ThrottleDuration = 0
 
 	uniqueClusters := make(map[*logical_broker.Cluster][]string)
 
 	topics := request.Topics
 
-	response.ClusterID = &logicalBroker.ClusterID
 	response.ControllerID = math.MaxInt32
 
-	response.Brokers = append(response.Brokers, metadatav8.Brokers{
+	response.Brokers = append(response.Brokers, metadatav1.Brokers{
 		ID:   response.ControllerID,
 		Host: logicalBroker.AdvertiseListener.IP.String(),
 		Port: int32(logicalBroker.AdvertiseListener.Port),
@@ -58,7 +54,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 
 		if cluster == nil {
 			log.Error(nil, "Client tried to get metadata for a topic that doesn't exist")
-			response.Topics = append(response.Topics, metadatav8.Topics{
+			response.Topics = append(response.Topics, metadatav1.Topics{
 				ErrCode:  errors.UnknownTopicOrPartition,
 				Name:     topicName,
 				Internal: false,
@@ -86,12 +82,8 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 			return nil, fmt.Errorf("error fetching metadata for topics from kafka: %w", err)
 		}
 
-		if int64(kafkaMetadata.ThrottleMillis) > response.ThrottleDuration.Milliseconds() {
-			response.ThrottleDuration = time.Duration(kafkaMetadata.ThrottleMillis) * time.Millisecond
-		}
-
 		for _, broker := range kafkaMetadata.Brokers {
-			response.Brokers = append(response.Brokers, metadatav8.Brokers{
+			response.Brokers = append(response.Brokers, metadatav1.Brokers{
 				ID:   currentBrokerId,
 				Host: logicalBroker.AdvertiseListener.IP.String(),
 				Port: int32(logicalBroker.AdvertiseListener.Port),
@@ -102,17 +94,16 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 		}
 
 		for _, topic := range kafkaMetadata.Topics {
-			responseTopic := metadatav8.Topics{
+			responseTopic := metadatav1.Topics{
 				ErrCode:  errors.KafkaError(topic.ErrorCode),
 				Name:     *topic.Topic,
 				Internal: false,
 			}
 
 			for _, partition := range topic.Partitions {
-				responsePartition := metadatav8.Partitions{
-					ErrCode:     errors.KafkaError(partition.ErrorCode),
-					Index:       partition.Partition,
-					LeaderEpoch: partition.LeaderEpoch,
+				responsePartition := metadatav1.Partitions{
+					ErrCode: errors.KafkaError(partition.ErrorCode),
+					Index:   partition.Partition,
 				}
 
 				responsePartition.LeaderID = clusterBrokerIDMap[partition.Leader]
@@ -124,10 +115,6 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 
 				for _, isr := range partition.ISR {
 					responsePartition.ISRNodes = append(responsePartition.ISRNodes, clusterBrokerIDMap[isr])
-				}
-
-				for _, offline := range partition.OfflineReplicas {
-					responsePartition.OfflineReplicas = append(responsePartition.OfflineReplicas, clusterBrokerIDMap[offline])
 				}
 
 				responseTopic.Partitions = append(responseTopic.Partitions, responsePartition)
@@ -151,7 +138,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 		}
 
 		for range kafkaMetadata.Brokers {
-			response.Brokers = append(response.Brokers, metadatav8.Brokers{
+			response.Brokers = append(response.Brokers, metadatav1.Brokers{
 				ID:   currentBrokerId,
 				Host: logicalBroker.AdvertiseListener.IP.String(),
 				Port: int32(logicalBroker.AdvertiseListener.Port),

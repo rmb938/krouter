@@ -1,4 +1,4 @@
-package v8
+package v4
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
-	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
+	metadatav4 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v4"
 	"github.com/rmb938/krouter/pkg/net/message"
 )
 
@@ -19,8 +19,8 @@ type Handler struct {
 func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("metadata-v8-handler")
 
-	request := message.(*metadatav8.Request)
-	response := &metadatav8.Response{}
+	request := message.(*metadatav4.Request)
+	response := &metadatav4.Response{}
 
 	logicalBroker := broker
 
@@ -33,7 +33,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 	response.ClusterID = &logicalBroker.ClusterID
 	response.ControllerID = math.MaxInt32
 
-	response.Brokers = append(response.Brokers, metadatav8.Brokers{
+	response.Brokers = append(response.Brokers, metadatav4.Brokers{
 		ID:   response.ControllerID,
 		Host: logicalBroker.AdvertiseListener.IP.String(),
 		Port: int32(logicalBroker.AdvertiseListener.Port),
@@ -58,7 +58,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 
 		if cluster == nil {
 			log.Error(nil, "Client tried to get metadata for a topic that doesn't exist")
-			response.Topics = append(response.Topics, metadatav8.Topics{
+			response.Topics = append(response.Topics, metadatav4.Topics{
 				ErrCode:  errors.UnknownTopicOrPartition,
 				Name:     topicName,
 				Internal: false,
@@ -91,7 +91,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 		}
 
 		for _, broker := range kafkaMetadata.Brokers {
-			response.Brokers = append(response.Brokers, metadatav8.Brokers{
+			response.Brokers = append(response.Brokers, metadatav4.Brokers{
 				ID:   currentBrokerId,
 				Host: logicalBroker.AdvertiseListener.IP.String(),
 				Port: int32(logicalBroker.AdvertiseListener.Port),
@@ -102,17 +102,17 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 		}
 
 		for _, topic := range kafkaMetadata.Topics {
-			responseTopic := metadatav8.Topics{
+			responseTopic := metadatav4.Topics{
 				ErrCode:  errors.KafkaError(topic.ErrorCode),
 				Name:     *topic.Topic,
 				Internal: false,
 			}
 
 			for _, partition := range topic.Partitions {
-				responsePartition := metadatav8.Partitions{
-					ErrCode:     errors.KafkaError(partition.ErrorCode),
-					Index:       partition.Partition,
-					LeaderEpoch: partition.LeaderEpoch,
+				responsePartition := metadatav4.Partitions{
+					ErrCode:  errors.KafkaError(partition.ErrorCode),
+					Index:    partition.Partition,
+					LeaderID: response.ControllerID,
 				}
 
 				responsePartition.LeaderID = clusterBrokerIDMap[partition.Leader]
@@ -124,10 +124,6 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 
 				for _, isr := range partition.ISR {
 					responsePartition.ISRNodes = append(responsePartition.ISRNodes, clusterBrokerIDMap[isr])
-				}
-
-				for _, offline := range partition.OfflineReplicas {
-					responsePartition.OfflineReplicas = append(responsePartition.OfflineReplicas, clusterBrokerIDMap[offline])
 				}
 
 				responseTopic.Partitions = append(responseTopic.Partitions, responsePartition)
@@ -151,7 +147,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 		}
 
 		for range kafkaMetadata.Brokers {
-			response.Brokers = append(response.Brokers, metadatav8.Brokers{
+			response.Brokers = append(response.Brokers, metadatav4.Brokers{
 				ID:   currentBrokerId,
 				Host: logicalBroker.AdvertiseListener.IP.String(),
 				Port: int32(logicalBroker.AdvertiseListener.Port),

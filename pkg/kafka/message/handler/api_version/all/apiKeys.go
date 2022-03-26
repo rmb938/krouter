@@ -10,6 +10,7 @@ import (
 	implDescribeGroupsV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_groups/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/fetch"
 	implFetchV11 "github.com/rmb938/krouter/pkg/kafka/message/impl/fetch/v11"
+	implFetchV4 "github.com/rmb938/krouter/pkg/kafka/message/impl/fetch/v4"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/find_coordinator"
 	implFindCoordinatorV2 "github.com/rmb938/krouter/pkg/kafka/message/impl/find_coordinator/v2"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/heartbeat"
@@ -23,12 +24,14 @@ import (
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets"
 	implListOffsetsV5 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v5"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
+	metadatav0 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v0"
 	metadatav8 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v8"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/offset_commit"
 	implOffsetCommitV4 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_commit/v4"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch"
 	implOffsetFetchv4 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch/v4"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
+	producev3 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v3"
 	producev7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group"
 	implSyncGroupV3 "github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group/v3"
@@ -41,11 +44,11 @@ type APIKey struct {
 
 var APIKeys = map[int16]APIKey{
 	produce.Key: {
-		MinVersion: producev7.Version,
+		MinVersion: producev3.Version,
 		MaxVersion: producev7.Version,
 	},
 	metadata.Key: {
-		MinVersion: metadatav8.Version,
+		MinVersion: metadatav0.Version,
 		MaxVersion: metadatav8.Version,
 	},
 	api_version.Key: {
@@ -81,7 +84,7 @@ var APIKeys = map[int16]APIKey{
 		MaxVersion: implListOffsetsV5.Version,
 	},
 	fetch.Key: {
-		MinVersion: implFetchV11.Version,
+		MinVersion: implFetchV4.Version,
 		MaxVersion: implFetchV11.Version,
 	},
 	heartbeat.Key: {
