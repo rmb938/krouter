@@ -27,18 +27,20 @@ func (c *Cluster) APICreateTopic(topicName string, partitions int32, replication
 
 	topic := &topics.Topic{
 		Name:       topicName,
-		Cluster:    c.Name,
 		Partitions: partitions,
 		Config:     config,
 	}
 
-	kafkaClient, err := c.controller.newFranzKafkaClient()
-	if err != nil {
-		return nil, err
+	topicMessage := &TopicMessage{
+		Name:    topicName,
+		Action:  TopicMessageActionCreate,
+		Cluster: c.Name,
+		Topic:   topic,
 	}
-	defer kafkaClient.Close()
-	topicBytes, _ := json.Marshal(topic)
-	record := kgo.KeySliceRecord([]byte(topic.Name), topicBytes)
+
+	kafkaClient := c.controller.franzKafkaClient
+	topicMessageBytes, _ := json.Marshal(topicMessage)
+	record := kgo.KeySliceRecord([]byte(fmt.Sprintf("cluster-%s-topic-%s", c.Name, topicName)), topicMessageBytes)
 	record.Topic = InternalTopicTopicConfig
 	produceResp := kafkaClient.ProduceSync(context.TODO(), record)
 	if produceResp.FirstErr() != nil {
@@ -129,18 +131,20 @@ func (c *Cluster) APIUpdateTopic(topicName string, partitions int32, config map[
 
 	topic = &topics.Topic{
 		Name:       topicName,
-		Cluster:    c.Name,
 		Partitions: partitions,
 		Config:     config,
 	}
 
-	kafkaClient, err := c.controller.newFranzKafkaClient()
-	if err != nil {
-		return nil, err
+	topicMessage := &TopicMessage{
+		Name:    topicName,
+		Action:  TopicMessageActionUpdate,
+		Cluster: c.Name,
+		Topic:   topic,
 	}
-	defer kafkaClient.Close()
-	topicBytes, _ := json.Marshal(topic)
-	record := kgo.KeySliceRecord([]byte(topic.Name), topicBytes)
+
+	kafkaClient := c.controller.franzKafkaClient
+	topicMessageBytes, _ := json.Marshal(topicMessage)
+	record := kgo.KeySliceRecord([]byte(fmt.Sprintf("cluster-%s-topic-%s", c.Name, topic.Name)), topicMessageBytes)
 	record.Topic = InternalTopicTopicConfig
 	produceResp := kafkaClient.ProduceSync(context.TODO(), record)
 	if produceResp.FirstErr() != nil {
@@ -165,12 +169,15 @@ func (c *Cluster) APIDeleteTopicCluster(topicName string) error {
 		}
 	}
 
-	kafkaClient, err := c.controller.newFranzKafkaClient()
-	if err != nil {
-		return err
+	topicMessage := &TopicMessage{
+		Name:    topicName,
+		Action:  TopicMessageActionDelete,
+		Cluster: c.Name,
 	}
-	defer kafkaClient.Close()
-	record := kgo.KeySliceRecord([]byte(topicName), nil)
+
+	kafkaClient := c.controller.franzKafkaClient
+	topicMessageBytes, _ := json.Marshal(topicMessage)
+	record := kgo.KeySliceRecord([]byte(fmt.Sprintf("cluster-%s-topic-%s", c.Name, topicName)), topicMessageBytes)
 	record.Topic = InternalTopicTopicConfig
 	produceResp := kafkaClient.ProduceSync(context.TODO(), record)
 	if produceResp.FirstErr() != nil {

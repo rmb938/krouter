@@ -47,7 +47,6 @@ func (c *Controller) newFranzKafkaClient(topics ...string) (*kgo.Client, error) 
 	franzKafkaClient, err := kgo.NewClient(
 		kgo.SeedBrokers(c.kafkaAddrs...),
 		kgo.RequiredAcks(kgo.AllISRAcks()),
-		kgo.ProducerBatchCompression(kgo.GzipCompression()),
 		kgo.ConsumeTopics(topics...),
 	)
 	if err != nil {
@@ -68,6 +67,7 @@ func (c *Controller) initFranzKafkaClient() error {
 	c.franzKafkaClient, err = kgo.NewClient(
 		kgo.SeedBrokers(c.kafkaAddrs...),
 		kgo.RequiredAcks(kgo.AllISRAcks()),
+		kgo.ProducerBatchCompression(kgo.GzipCompression()),
 		kgo.MaxVersions(maxVersions),
 	)
 	if err != nil {

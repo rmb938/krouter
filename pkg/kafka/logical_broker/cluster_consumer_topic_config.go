@@ -10,8 +10,23 @@ import (
 )
 
 const (
-	InternalTopicTopicConfig = "__krouter_topic_config"
+	InternalTopicTopicConfig = "__krouter_topic_configs"
 )
+
+type TopicMessageAction string
+
+const (
+	TopicMessageActionCreate = "create"
+	TopicMessageActionUpdate = "update"
+	TopicMessageActionDelete = "delete"
+)
+
+type TopicMessage struct {
+	Name    string             `json:"name"`
+	Action  TopicMessageAction `json:"action"`
+	Cluster string             `json:"cluster"`
+	Topic   *topics.Topic      `json:"topic"`
+}
 
 func (c *Cluster) ConsumeTopicConfigs() {
 	kafkaClient, err := c.controller.newFranzKafkaClient(InternalTopicTopicConfig)
@@ -28,14 +43,18 @@ func (c *Cluster) ConsumeTopicConfigs() {
 	for {
 		fetches := kafkaClient.PollFetches(context.TODO())
 		if fetches.IsClientClosed() {
-			c.log.Info("Controller Kafka Client Closed")
+			c.log.Info("Topic Config Kafka Client Closed")
+			os.Exit(1)
 			return
 		}
 
-		fetches.EachError(func(s string, i int32, err error) {
-			c.log.Error(err, "Error polling fetches", "partition", i)
-			return
-		})
+		fetchErrors := fetches.Errors()
+		for _, fetchError := range fetches.Errors() {
+			c.log.Error(fetchError.Err, "Error polling fetches for config consumer", "partition", fetchError.Partition)
+		}
+		if len(fetchErrors) > 0 {
+			os.Exit(1)
+		}
 
 		fetches.EachTopic(func(topic kgo.FetchTopic) {
 			topic.EachPartition(func(partition kgo.FetchPartition) {
@@ -51,21 +70,23 @@ func (c *Cluster) ConsumeTopicConfigs() {
 
 			lowWaterMarks[record.Partition] = record.Offset + 1
 
-			topicName := string(record.Key)
+			key := string(record.Key)
 
-			if topicName != InternalControlKey {
-				if record.Value == nil {
-					c.topics.Delete(topicName)
-				} else {
-					topic := &topics.Topic{}
-					err := json.Unmarshal(record.Value, topic)
-					if err != nil {
-						c.log.Error(err, "error parsing topic config", "topic", topicName, "config", string(record.Value))
-						os.Exit(1)
-						return
+			if key != InternalControlKey {
+				topicMessage := &TopicMessage{}
+				err := json.Unmarshal(record.Value, topicMessage)
+				if err != nil {
+					// We don't exit and return here because it'll crash all instances
+					//  instead we just ignore the message
+					c.log.Error(err, "error parsing topic config", "key", key, "data", string(record.Value))
+				}
+
+				if topicMessage.Cluster == c.Name {
+					if topicMessage.Action == TopicMessageActionDelete {
+						c.topics.Delete(topicMessage.Name)
+					} else {
+						c.topics.Store(topicMessage.Name, topicMessage.Topic)
 					}
-
-					c.topics.Store(topicName, topic)
 				}
 			}
 
@@ -86,7 +107,6 @@ func (c *Cluster) shouldBeSynced(highWaterMarks, lowWaterMarks map[int32]int64) 
 
 	if synced {
 		c.syncedOnce.Do(func() {
-			c.log.Info("Cluster Synced Topic Configs")
 			c.syncedChan <- struct{}{}
 		})
 	}

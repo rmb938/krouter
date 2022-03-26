@@ -25,6 +25,24 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 		return response, nil
 	}
 
+	if request.TransactionalID != nil {
+		for _, topicData := range request.TopicData {
+			produceResponse := v7.ProduceResponse{
+				Name: topicData.Name,
+			}
+			for _, partitionData := range topicData.PartitionData {
+				partitionResponse := v7.PartitionResponse{
+					Index:   partitionData.Index,
+					ErrCode: errors.TransactionIDAuthorizationFailed,
+				}
+				produceResponse.PartitionResponses = append(produceResponse.PartitionResponses, partitionResponse)
+			}
+			response.Responses = append(response.Responses, produceResponse)
+		}
+
+		return response, nil
+	}
+
 	// get cluster from first topic since all topics and partitions in this request should be to the same backend
 	//  if our cache has the wrong one some (or all) of our topics will error and the client will refresh metadata
 	cluster, _ := broker.GetTopic(request.TopicData[0].Name)

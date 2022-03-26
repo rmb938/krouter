@@ -90,6 +90,7 @@ func (b *Broker) InitClusters() error {
 
 	go b.controller.ConsumeTopicPointers()
 	b.controller.WaitSynced()
+	b.log.Info("Controller Synced")
 
 	// TODO: remove this it's temporary
 	pointer, err := b.controller.APIGetTopicPointer("test1")
@@ -144,7 +145,9 @@ func (b *Broker) InitClusters() error {
 
 	for _, cluster := range b.clusters {
 		go cluster.ConsumeTopicConfigs()
+		go cluster.ConsumeTopicLeaders()
 		cluster.WaitSynced()
+		b.log.Info("Cluster Synced", "cluster", cluster.Name)
 	}
 
 	// TODO: remove this it's temporary

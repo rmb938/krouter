@@ -10,7 +10,7 @@ func (c *Controller) APISetTopicPointer(topicName string, cluster string) error 
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	record := kgo.KeyStringRecord(topicName, cluster)
+	record := kgo.KeySliceRecord([]byte(topicName), []byte(cluster))
 	record.Topic = InternalTopicTopicPointers
 	resp := c.franzKafkaClient.ProduceSync(ctx, record)
 	if resp.FirstErr() != nil {
@@ -34,7 +34,7 @@ func (c *Controller) APIDeleteTopicPointer(topicName string) error {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	record := kgo.KeyStringRecord(topicName, "")
+	record := kgo.KeySliceRecord([]byte(topicName), nil)
 	record.Topic = InternalTopicTopicPointers
 	resp := c.franzKafkaClient.ProduceSync(ctx, record)
 	if resp.FirstErr() != nil {

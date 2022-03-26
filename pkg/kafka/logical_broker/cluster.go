@@ -2,9 +2,9 @@ package logical_broker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/outcaste-io/ristretto"
@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	ClusterTopicLeaderKeyFmt = "{cluster-%s-topic-partition-leader}-%s-partition-%d"
+	ClusterTopicLeaderKeyFmt = "topic-%s-partition-%d"
 )
 
 type Cluster struct {
@@ -85,16 +85,15 @@ func (c *Cluster) Close() error {
 }
 
 func (c *Cluster) topicLeader(topic string, partition int32) (int, error) {
-	brokerIDInterf, found := c.topicLeaderCache.Get(fmt.Sprintf(ClusterTopicLeaderKeyFmt, c.Name, topic, partition))
+	brokerIDInterf, found := c.topicLeaderCache.Get(fmt.Sprintf(ClusterTopicLeaderKeyFmt, topic, partition))
 	if !found {
 		return -1, nil
 	}
-
-	c.topicLeaderCache.SetWithTTL(fmt.Sprintf(ClusterTopicLeaderKeyFmt, c.Name, topic, partition), brokerIDInterf, 0, 1*time.Hour)
 	return brokerIDInterf.(int), nil
 }
 
 func (c *Cluster) TopicMetadata(ctx context.Context, topics []string) (*kmsg.MetadataResponse, error) {
+	kafkaClient := c.controller.franzKafkaClient
 
 	metadataRequest := kmsg.NewPtrMetadataRequest()
 	metadataRequest.AllowAutoTopicCreation = false // don't allow topic creation
@@ -122,9 +121,20 @@ func (c *Cluster) TopicMetadata(ctx context.Context, topics []string) (*kmsg.Met
 				continue
 			}
 
-			// Clients typically refresh metadata every 10 minutes
-			// so expiring in an hour "should" be good enough
-			c.topicLeaderCache.SetWithTTL(fmt.Sprintf(ClusterTopicLeaderKeyFmt, c.Name, *topic.Topic, partition.Partition), int(partition.Leader), 0, 1*time.Hour)
+			// publish topic partition leader
+			topicLeaderMessage := &TopicLeaderMessage{
+				Name:      *topic.Topic,
+				Cluster:   c.Name,
+				Partition: partition.Partition,
+				Leader:    int(partition.Leader),
+			}
+			topicLeaderMessageBytes, _ := json.Marshal(topicLeaderMessage)
+			record := kgo.KeySliceRecord([]byte(fmt.Sprintf("cluster-%s-topic-%s-partition-%d", c.Name, *topic.Topic, partition.Partition)), topicLeaderMessageBytes)
+			record.Topic = InternalTopicTopicLeader
+			produceResp := kafkaClient.ProduceSync(ctx, record)
+			if produceResp.FirstErr() != nil {
+				return nil, produceResp.FirstErr()
+			}
 		}
 	}
 
