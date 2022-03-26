@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"time"
+
 	"github.com/go-logr/logr"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
@@ -23,7 +25,16 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 		response.ErrCode = errors.TransactionIDAuthorizationFailed
 	}
 
-	response.ErrCode = errors.ClusterAuthorizationFailed // TODO: remove this once we support transactions
+	kafkaResponse, err := broker.GetController().InitProducer(request.TransactionTimeoutDuration)
+	if err != nil {
+		return nil, err
+	}
+
+	response.ThrottleDuration = time.Duration(kafkaResponse.ThrottleMillis) * time.Millisecond
+	response.ErrCode = errors.KafkaError(kafkaResponse.ErrorCode)
+
+	response.ProducerID = kafkaResponse.ProducerID
+	response.ProducerEpoch = kafkaResponse.ProducerEpoch
 
 	return response, nil
 }
