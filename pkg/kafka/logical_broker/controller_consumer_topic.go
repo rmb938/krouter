@@ -105,11 +105,10 @@ func (c *Controller) ConsumeTopicPointers() {
 
 			if topicName != InternalControlKey {
 				if len(cluster) == 0 {
-					delete(c.topicPointers, topicName)
-					continue
+					c.topicPointers.Delete(topicName)
+				} else {
+					c.topicPointers.Store(topicName, cluster)
 				}
-
-				c.topicPointers[topicName] = cluster
 			}
 
 			c.shouldBeSynced(highWaterMarks, lowWaterMarks)

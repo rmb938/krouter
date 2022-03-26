@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/puzpuzpuz/xsync"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group"
 	"github.com/rmb938/krouter/pkg/redisw"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -21,7 +22,7 @@ type Controller struct {
 	kafkaAddrs       []string
 	franzKafkaClient *kgo.Client
 
-	topicPointers map[string]string
+	topicPointers *xsync.MapOf[string]
 }
 
 func NewController(log logr.Logger, addrs []string, redisClient *redisw.RedisClient) (*Controller, error) {
@@ -31,7 +32,7 @@ func NewController(log logr.Logger, addrs []string, redisClient *redisw.RedisCli
 
 		kafkaAddrs:    addrs,
 		redisClient:   redisClient,
-		topicPointers: make(map[string]string),
+		topicPointers: xsync.NewMapOf[string](),
 	}
 
 	err := controller.initFranzKafkaClient()

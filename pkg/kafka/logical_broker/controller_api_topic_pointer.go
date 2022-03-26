@@ -23,7 +23,7 @@ func (c *Controller) APISetTopicPointer(topicName string, cluster string) error 
 func (c *Controller) APIGetTopicPointer(topicName string) (*string, error) {
 	// TODO: wait to be synced
 
-	if pointer, ok := c.topicPointers[topicName]; ok {
+	if pointer, ok := c.topicPointers.Load(topicName); ok {
 		return &pointer, nil
 	}
 

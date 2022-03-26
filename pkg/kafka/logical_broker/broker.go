@@ -199,7 +199,7 @@ func (b *Broker) GetTopics() ([]*topics.Topic, error) {
 
 	for _, cluster := range b.clusters {
 		cluster.topics.Range(func(topicName string, topic *topics.Topic) bool {
-			if clusterName, ok := b.controller.topicPointers[topicName]; ok {
+			if clusterName, ok := b.controller.topicPointers.Load(topicName); ok {
 				if clusterName == cluster.Name {
 					allTopics = append(allTopics, topic)
 				}
@@ -213,7 +213,7 @@ func (b *Broker) GetTopics() ([]*topics.Topic, error) {
 
 func (b *Broker) GetTopic(topicName string) (*Cluster, *topics.Topic) {
 
-	if clusterName, ok := b.controller.topicPointers[topicName]; ok {
+	if clusterName, ok := b.controller.topicPointers.Load(topicName); ok {
 		if cluster, ok := b.clusters[clusterName]; ok {
 			topic, ok := cluster.topics.Load(topicName)
 			if ok {
