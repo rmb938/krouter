@@ -27,11 +27,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 
 	// get cluster from first topic since all topics and partitions in this request should be to the same backend
 	//  if our cache has the wrong one some (or all) of our topics will error and the client will refresh metadata
-	cluster, _, err := broker.GetTopic(request.TopicData[0].Name)
-	if err != nil {
-		log.Error(err, "error getting topic from logical broker")
-		return nil, fmt.Errorf("error getting topic from logical broker: %w", err)
-	}
+	cluster, _ := broker.GetTopic(request.TopicData[0].Name)
 
 	if cluster == nil {
 		for _, topicData := range request.TopicData {

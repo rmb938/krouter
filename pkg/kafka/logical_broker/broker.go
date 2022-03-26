@@ -1,15 +1,10 @@
 package logical_broker
 
 import (
-	"context"
 	"fmt"
 	"net"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker/topics"
@@ -71,7 +66,7 @@ func (b *Broker) registerCluster(name string, addrs []string) (*Cluster, error) 
 	}
 
 	var err error
-	b.clusters[name], err = NewCluster(name, addrs, b.log, b.redisClient)
+	b.clusters[name], err = NewCluster(name, addrs, b.log, b.controller)
 	if err != nil {
 		return nil, err
 	}
@@ -82,64 +77,19 @@ func (b *Broker) registerCluster(name string, addrs []string) (*Cluster, error) 
 func (b *Broker) InitClusters() error {
 	// TODO: load from config or env vars
 
-	cluster, err := b.registerCluster("cluster1", []string{"localhost:9093"})
-	if err != nil {
-		return err
-	}
-	// TODO: remove this it's temporary
-	topic, err := cluster.APIGetTopic("test1")
-	if err != nil {
-		return err
-	}
-	if topic == nil {
-		b.log.Info("Creating topic")
-		_, err := cluster.APICreateTopic("test1", 1, 1, map[string]*string{})
-		if err != nil {
-			return err
-		}
-	}
-
-	cluster, err = b.registerCluster("cluster2", []string{"localhost:9094"})
-	if err != nil {
-		return err
-	}
-	// TODO: remove this it's temporary
-	topic, err = cluster.APIGetTopic("test2")
-	if err != nil {
-		return err
-	}
-	if topic == nil {
-		_, err := cluster.APICreateTopic("test2", 1, 1, map[string]*string{})
-		if err != nil {
-			return err
-		}
-	}
-
-	cluster, err = b.registerCluster("cluster3", []string{"localhost:9392"})
-	if err != nil {
-		return err
-	}
-	// TODO: remove this it's temporary
-	topic, err = cluster.APIGetTopic("test3")
-	if err != nil {
-		return err
-	}
-	if topic == nil {
-		_, err := cluster.APICreateTopic("test3", 1, 3, map[string]*string{})
-		if err != nil {
-			return err
-		}
-	}
-
-	cluster, err = b.registerCluster("controller", []string{"localhost:19093"})
+	var err error
+	b.controller, err = NewController(b.log, []string{"localhost:19093"}, b.redisClient)
 	if err != nil {
 		return err
 	}
 
-	b.controller, err = NewController(b.log, cluster)
+	err = b.controller.CreateInternalTopics()
 	if err != nil {
 		return err
 	}
+
+	go b.controller.ConsumeTopicPointers()
+	b.controller.WaitSynced()
 
 	// TODO: remove this it's temporary
 	pointer, err := b.controller.APIGetTopicPointer("test1")
@@ -147,27 +97,87 @@ func (b *Broker) InitClusters() error {
 		return err
 	}
 	if pointer == nil {
-		err = b.controller.APISetTopicPointer("test1", b.clusters["cluster1"])
+		err = b.controller.APISetTopicPointer("test1", "cluster1")
 		if err != nil {
 			return err
 		}
 	}
+
+	// TODO: remove this it's temporary
 	pointer, err = b.controller.APIGetTopicPointer("test2")
 	if err != nil {
 		return err
 	}
 	if pointer == nil {
-		err = b.controller.APISetTopicPointer("test2", b.clusters["cluster2"])
+		err = b.controller.APISetTopicPointer("test2", "cluster2")
 		if err != nil {
 			return err
 		}
 	}
+
+	// TODO: remove this it's temporary
 	pointer, err = b.controller.APIGetTopicPointer("test3")
 	if err != nil {
 		return err
 	}
 	if pointer == nil {
-		err = b.controller.APISetTopicPointer("test3", b.clusters["cluster3"])
+		err = b.controller.APISetTopicPointer("test3", "cluster3")
+		if err != nil {
+			return err
+		}
+	}
+
+	cluster1, err := b.registerCluster("cluster1", []string{"localhost:9093"})
+	if err != nil {
+		return err
+	}
+
+	cluster2, err := b.registerCluster("cluster2", []string{"localhost:9094"})
+	if err != nil {
+		return err
+	}
+
+	cluster3, err := b.registerCluster("cluster3", []string{"localhost:9392"})
+	if err != nil {
+		return err
+	}
+
+	for _, cluster := range b.clusters {
+		go cluster.ConsumeTopicConfigs()
+		cluster.WaitSynced()
+	}
+
+	// TODO: remove this it's temporary
+	topic, err := cluster1.APIGetTopic("test1")
+	if err != nil {
+		return err
+	}
+	if topic == nil {
+		_, err := cluster1.APICreateTopic("test1", 1, 1, map[string]*string{})
+		if err != nil {
+			return err
+		}
+	}
+
+	// TODO: remove this it's temporary
+	topic, err = cluster2.APIGetTopic("test2")
+	if err != nil {
+		return err
+	}
+	if topic == nil {
+		_, err := cluster2.APICreateTopic("test2", 1, 1, map[string]*string{})
+		if err != nil {
+			return err
+		}
+	}
+
+	// TODO: remove this it's temporary
+	topic, err = cluster3.APIGetTopic("test3")
+	if err != nil {
+		return err
+	}
+	if topic == nil {
+		_, err := cluster3.APICreateTopic("test3", 1, 3, map[string]*string{})
 		if err != nil {
 			return err
 		}
@@ -187,108 +197,30 @@ func (b *Broker) GetClusters() map[string]*Cluster {
 func (b *Broker) GetTopics() ([]*topics.Topic, error) {
 	var allTopics []*topics.Topic
 
-	redisContext, redisContextCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer redisContextCancel()
-
-	err := b.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {
-		scan := tx.Scan(redisContext, 0, fmt.Sprintf("%s-*", TopicConfigRedisKeyFmtPrefix), 0).Iterator()
-
-		for scan.Next(redisContext) {
-			key := scan.Val()
-			pointer, err := tx.Get(redisContext, key).Result()
-			if err == redis.Nil {
-				continue
-			}
-			if err != nil {
-				return err
-			}
-
-			topicData, err := tx.HGetAll(redisContext, pointer).Result()
-			if err != nil {
-				return err
-			}
-			if len(topicData) == 0 {
-				continue
-			}
-
-			partitions, _ := strconv.Atoi(topicData["partitions"])
-			config := make(map[string]*string)
-
-			for key, value := range topicData {
-				if strings.HasPrefix(key, "config.") {
-					configKey := strings.TrimPrefix(key, "config.")
-					config[configKey] = &value
+	for _, cluster := range b.clusters {
+		cluster.topics.Range(func(topicName string, topic *topics.Topic) bool {
+			if clusterName, ok := b.controller.topicPointers[topicName]; ok {
+				if clusterName == cluster.Name {
+					allTopics = append(allTopics, topic)
 				}
 			}
+			return false
+		})
+	}
 
-			allTopics = append(allTopics, &topics.Topic{
-				Name:       strings.TrimPrefix(key, fmt.Sprintf("%s-", TopicConfigRedisKeyFmtPrefix)),
-				Partitions: int32(partitions),
-				Config:     config,
-			})
-		}
-		return nil
-	})
-
-	return allTopics, err
+	return allTopics, nil
 }
 
-func (b *Broker) GetTopic(name string) (*Cluster, *topics.Topic, error) {
-	redisContext, redisContextCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer redisContextCancel()
+func (b *Broker) GetTopic(topicName string) (*Cluster, *topics.Topic) {
 
-	var cluster *Cluster
-	var topic *topics.Topic
-	topicRedisKey := fmt.Sprintf(TopicConfigRedisKeyFmt, name)
-	err := b.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {
-		pointer, err := tx.Get(redisContext, topicRedisKey).Result()
-		if err == redis.Nil {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-
-		clusterName := strings.TrimSuffix(strings.TrimPrefix(pointer, fmt.Sprintf("%s-", TopicConfigClusterRedisKeyFmtPrefix)), fmt.Sprintf("-%s", fmt.Sprintf(TopicConfigClusterRedisKeyFmtSuffix, name)))
-		cluster, _ = b.clusters[clusterName]
-
-		topicData, err := tx.HGetAll(redisContext, pointer).Result()
-		if err != nil {
-			return err
-		}
-		if len(topicData) == 0 {
-			return nil
-		}
-
-		partitions, _ := strconv.Atoi(topicData["partitions"])
-		config := make(map[string]*string)
-
-		for key, value := range topicData {
-			if strings.HasPrefix(key, "config.") {
-				configKey := strings.TrimPrefix(key, "config.")
-				config[configKey] = &value
+	if clusterName, ok := b.controller.topicPointers[topicName]; ok {
+		if cluster, ok := b.clusters[clusterName]; ok {
+			topic, ok := cluster.topics.Load(topicName)
+			if ok {
+				return cluster, topic
 			}
 		}
-
-		topic = &topics.Topic{
-			Name:       strings.TrimPrefix(topicRedisKey, fmt.Sprintf("%s-", TopicConfigRedisKeyFmtPrefix)),
-			Partitions: int32(partitions),
-			Config:     config,
-		}
-
-		return nil
-	}, topicRedisKey)
-	if err != nil {
-		return nil, nil, err
 	}
 
-	if cluster == nil {
-		return nil, nil, nil
-	}
-
-	if topic == nil {
-		return nil, nil, nil
-	}
-
-	return cluster, topic, nil
+	return nil, nil
 }

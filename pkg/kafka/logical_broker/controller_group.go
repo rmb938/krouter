@@ -28,7 +28,7 @@ func (c *Controller) FindGroupCoordinator(consumerGroup string) (*kmsg.FindCoord
 	request.CoordinatorType = 0
 	request.CoordinatorKey = consumerGroup
 
-	response, err := c.cluster.franzKafkaClient.Request(ctx, request)
+	response, err := c.franzKafkaClient.Request(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func (c *Controller) FindGroupCoordinator(consumerGroup string) (*kmsg.FindCoord
 	if coordinatorResponse.ErrorCode == int16(errors.None) {
 		// Consumers don't actively refresh this
 		// so if this expires we should return errors.NotCoordinator and clients will try and FindGroupCoordinator again
-		err := c.cluster.redisClient.Client.Set(ctx, fmt.Sprintf(GroupCoordinatorRedisKeyFmt, consumerGroup), coordinatorResponse.NodeID, 1*time.Hour).Err()
+		err := c.redisClient.Client.Set(ctx, fmt.Sprintf(GroupCoordinatorRedisKeyFmt, consumerGroup), coordinatorResponse.NodeID, 1*time.Hour).Err()
 		if err != nil {
 			return nil, err
 		}
@@ -48,7 +48,7 @@ func (c *Controller) FindGroupCoordinator(consumerGroup string) (*kmsg.FindCoord
 }
 
 func (c *Controller) groupCoordinator(ctx context.Context, consumerGroup string) (int, error) {
-	brokerID, err := c.cluster.redisClient.Client.Get(ctx, fmt.Sprintf(GroupCoordinatorRedisKeyFmt, consumerGroup)).Int()
+	brokerID, err := c.redisClient.Client.Get(ctx, fmt.Sprintf(GroupCoordinatorRedisKeyFmt, consumerGroup)).Int()
 	if err != nil {
 		if err == redis.Nil {
 			return -1, nil
@@ -75,7 +75,7 @@ func (c *Controller) JoinGroup(request *kmsg.JoinGroupRequest) (*kmsg.JoinGroupR
 		return response, nil
 	}
 
-	resp, err := c.cluster.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
+	resp, err := c.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (c *Controller) JoinGroup(request *kmsg.JoinGroupRequest) (*kmsg.JoinGroupR
 
 	if joinGroupResponse.ErrorCode == int16(errors.None) {
 		redisGroupGenerationKey := fmt.Sprintf(GroupGenerationRedisKeyFmt, request.Group)
-		err = c.cluster.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
+		err = c.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
 			// TODO: make exp configurable
 			return tx.Set(ctx, redisGroupGenerationKey, joinGroupResponse.Generation, 7*24*time.Hour).Err()
 		}, redisGroupGenerationKey)
@@ -109,7 +109,7 @@ func (c *Controller) SyncGroup(request *kmsg.SyncGroupRequest) (*kmsg.SyncGroupR
 		return response, nil
 	}
 
-	resp, err := c.cluster.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
+	resp, err := c.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (c *Controller) LeaveGroup(request *kmsg.LeaveGroupRequest) (*kmsg.LeaveGro
 		return response, nil
 	}
 
-	resp, err := c.cluster.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
+	resp, err := c.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func (c *Controller) HeartBeat(request *kmsg.HeartbeatRequest) (*kmsg.HeartbeatR
 		return response, nil
 	}
 
-	resp, err := c.cluster.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
+	resp, err := c.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func (c *Controller) HeartBeat(request *kmsg.HeartbeatRequest) (*kmsg.HeartbeatR
 
 	if heartBeatResponse.ErrorCode == int16(errors.None) {
 		redisGroupGenerationKey := fmt.Sprintf(GroupGenerationRedisKeyFmt, request.Group)
-		err = c.cluster.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
+		err = c.redisClient.Client.Watch(ctx, func(tx *redis.Tx) error {
 			generationId, err := tx.Get(ctx, redisGroupGenerationKey).Int64()
 			if err != nil && err != redis.Nil {
 				return err
@@ -196,7 +196,7 @@ func (c *Controller) OffsetFetch(group, topic string, partition int32) (int64, e
 	redisGroupOffsetKey := fmt.Sprintf(GroupTopicPartitionOffsetRedisKeyFmt, group, c.base64Topic(topic), partition)
 
 	var offset int64
-	err := c.cluster.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {
+	err := c.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {
 		var err error
 		offset, err = tx.Get(redisContext, redisGroupOffsetKey).Int64()
 
@@ -218,7 +218,7 @@ func (c *Controller) OffsetFetchAllTopics(group string) (map[string]map[int32]in
 
 	redisGroupOffsetKeyPrefix := fmt.Sprintf(GroupTopicOffsetRedisKeyFmt+"-", group)
 
-	err := c.cluster.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {
+	err := c.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {
 		scan := tx.Scan(redisContext, 0, fmt.Sprintf("%s*", redisGroupOffsetKeyPrefix), 0).Iterator()
 
 		for scan.Next(redisContext) {
@@ -271,7 +271,7 @@ func (c *Controller) OffsetCommit(group, topic string, groupGenerationId, partit
 
 	redisGroupGenerationKey := fmt.Sprintf(GroupGenerationRedisKeyFmt, group)
 	redisGroupOffsetKey := fmt.Sprintf(GroupTopicPartitionOffsetRedisKeyFmt, group, c.base64Topic(topic), partition)
-	err := c.cluster.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {
+	err := c.redisClient.Client.Watch(redisContext, func(tx *redis.Tx) error {
 		// generation will be -1 when we are resetting offsets
 		if groupGenerationId != -1 {
 			generationId, err := tx.Get(redisContext, redisGroupGenerationKey).Int64()
@@ -319,7 +319,7 @@ func (c *Controller) DescribeGroup(group string) (*kmsg.DescribeGroupsResponse, 
 	request := kmsg.NewPtrDescribeGroupsRequest()
 	request.Groups = append(request.Groups, group)
 
-	resp, err := c.cluster.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
+	resp, err := c.franzKafkaClient.Broker(coordinatorId).RetriableRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}

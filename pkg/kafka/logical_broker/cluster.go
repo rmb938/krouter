@@ -3,49 +3,59 @@ package logical_broker
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/go-redis/redis/v8"
+	"github.com/outcaste-io/ristretto"
+	"github.com/puzpuzpuz/xsync"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker/topics"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
-	"github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group"
-	"github.com/rmb938/krouter/pkg/redisw"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
-	"github.com/twmb/franz-go/pkg/kversion"
 )
 
 const (
-	ClusterTopicLeaderRedisKeyFmt = "{cluster-%s-topic-partition-leader}-%s-partition-%d"
+	ClusterTopicLeaderKeyFmt = "{cluster-%s-topic-partition-leader}-%s-partition-%d"
 )
 
 type Cluster struct {
 	Name string
 	log  logr.Logger
 
-	metadatRefreshCtxCancel context.CancelFunc
-	metadataRefreshCtx      context.Context
+	syncedOnce sync.Once
+	syncedChan chan struct{}
 
-	redisClient *redisw.RedisClient
+	controller *Controller
 
 	franzKafkaClient *kgo.Client
+
+	topics           *xsync.MapOf[*topics.Topic]
+	topicLeaderCache *ristretto.Cache
 }
 
-func NewCluster(name string, addrs []string, log logr.Logger, redisClient *redisw.RedisClient) (*Cluster, error) {
+func NewCluster(name string, addrs []string, log logr.Logger, controller *Controller) (*Cluster, error) {
 	log = log.WithName(fmt.Sprintf("cluster-%s", name))
 
-	metadatRefreshCtx, metadatRefreshCtxCancel := context.WithCancel(context.Background())
-
 	cluster := &Cluster{
-		Name:                    name,
-		log:                     log,
-		redisClient:             redisClient,
-		metadatRefreshCtxCancel: metadatRefreshCtxCancel,
-		metadataRefreshCtx:      metadatRefreshCtx,
+		Name:       name,
+		log:        log,
+		syncedChan: make(chan struct{}),
+		controller: controller,
+		topics:     xsync.NewMapOf[*topics.Topic](),
 	}
 
 	if err := cluster.initFranzKafkaClient(addrs); err != nil {
+		return nil, err
+	}
+
+	var err error
+	cluster.topicLeaderCache, err = ristretto.NewCache(&ristretto.Config{
+		NumCounters: 1e7,     // number of keys to track frequency of (10M).
+		MaxCost:     1 << 30, // maximum cost of cache (1GB).
+		BufferItems: 64,      // number of keys per Get buffer.
+	})
+	if err != nil {
 		return nil, err
 	}
 
@@ -53,18 +63,10 @@ func NewCluster(name string, addrs []string, log logr.Logger, redisClient *redis
 }
 
 func (c *Cluster) initFranzKafkaClient(addrs []string) error {
-
-	// pull maxVersions
-	maxVersions := kversion.Stable()
-	// need to pin the max version of sync_group due to protocol setting in newer versions
-	// we support version 3, version 4 just adds tagged fields
-	maxVersions.SetMaxKeyVersion(sync_group.Key, 4)
-
 	var err error
 	c.franzKafkaClient, err = kgo.NewClient(
 		kgo.SeedBrokers(addrs...),
 		kgo.RequiredAcks(kgo.AllISRAcks()), // Required to support acks all, so let's just upgrade everyone
-		kgo.MaxVersions(maxVersions),
 	)
 	if err != nil {
 		return err
@@ -73,22 +75,23 @@ func (c *Cluster) initFranzKafkaClient(addrs []string) error {
 	return nil
 }
 
+func (c *Cluster) WaitSynced() {
+	<-c.syncedChan
+}
+
 func (c *Cluster) Close() error {
-	c.metadatRefreshCtxCancel()
 	c.franzKafkaClient.Close()
 	return nil
 }
 
-func (c *Cluster) topicLeader(ctx context.Context, topic string, partition int32) (int, error) {
-	brokerID, err := c.redisClient.Client.Get(ctx, fmt.Sprintf(ClusterTopicLeaderRedisKeyFmt, c.Name, topic, partition)).Int()
-	if err != nil {
-		if err == redis.Nil {
-			return -1, nil
-		}
-		return -1, err
+func (c *Cluster) topicLeader(topic string, partition int32) (int, error) {
+	brokerIDInterf, found := c.topicLeaderCache.Get(fmt.Sprintf(ClusterTopicLeaderKeyFmt, c.Name, topic, partition))
+	if !found {
+		return -1, nil
 	}
 
-	return brokerID, nil
+	c.topicLeaderCache.SetWithTTL(fmt.Sprintf(ClusterTopicLeaderKeyFmt, c.Name, topic, partition), brokerIDInterf, 0, 1*time.Hour)
+	return brokerIDInterf.(int), nil
 }
 
 func (c *Cluster) TopicMetadata(ctx context.Context, topics []string) (*kmsg.MetadataResponse, error) {
@@ -121,10 +124,7 @@ func (c *Cluster) TopicMetadata(ctx context.Context, topics []string) (*kmsg.Met
 
 			// Clients typically refresh metadata every 10 minutes
 			// so expiring in an hour "should" be good enough
-			err := c.redisClient.Client.Set(ctx, fmt.Sprintf(ClusterTopicLeaderRedisKeyFmt, c.Name, *topic.Topic, partition.Partition), partition.Leader, 1*time.Hour).Err()
-			if err != nil {
-				return nil, err
-			}
+			c.topicLeaderCache.SetWithTTL(fmt.Sprintf(ClusterTopicLeaderKeyFmt, c.Name, *topic.Topic, partition.Partition), int(partition.Leader), 0, 1*time.Hour)
 		}
 	}
 
@@ -137,7 +137,7 @@ func (c *Cluster) Produce(transactionID *string, timeoutMillis int32, topics []k
 
 	// get leader from first topic since all topics and partitions in this request should be to the same leader
 	//  if our cache has the wrong one some (or all) of our topics will error and the client will refresh metadata
-	leaderID, err := c.topicLeader(ctx, topics[0].Topic, topics[0].Partitions[0].Partition)
+	leaderID, err := c.topicLeader(topics[0].Topic, topics[0].Partitions[0].Partition)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func (c *Cluster) ListOffsets(topic *topics.Topic, partition int32, request *kms
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	leaderID, err := c.topicLeader(ctx, topic.Name, partition)
+	leaderID, err := c.topicLeader(topic.Name, partition)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +215,7 @@ func (c *Cluster) Fetch(topic *topics.Topic, partition int32, request *kmsg.Fetc
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	leaderID, err := c.topicLeader(ctx, topic.Name, partition)
+	leaderID, err := c.topicLeader(topic.Name, partition)
 	if err != nil {
 		return nil, err
 	}

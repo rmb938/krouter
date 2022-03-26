@@ -1,14 +1,16 @@
 package topics
 
 type Topic struct {
-	Name       string
-	Partitions int32
-	Config     map[string]*string
+	Name       string             `json:"name"`
+	Cluster    string             `json:"cluster"`
+	Partitions int32              `json:"partitions"`
+	Config     map[string]*string `json:"config"`
 }
 
 func (t *Topic) Clone() *Topic {
 	newT := &Topic{
 		Name:       t.Name,
+		Cluster:    t.Cluster,
 		Partitions: t.Partitions,
 		Config:     map[string]*string{},
 	}

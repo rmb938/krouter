@@ -54,11 +54,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 	for _, topicName := range topics {
 		log = log.WithValues("topic", topicName)
 
-		cluster, _, err := logicalBroker.GetTopic(topicName)
-		if err != nil {
-			log.Error(err, "error getting topic from logical broker")
-			return nil, fmt.Errorf("error getting topic from logical broker: %w", err)
-		}
+		cluster, _ := logicalBroker.GetTopic(topicName)
 
 		if cluster == nil {
 			log.Error(nil, "Client tried to get metadata for a topic that doesn't exist")
