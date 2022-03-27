@@ -25,12 +25,12 @@ func (c *Controller) FindTransactionCoordinator(transaction string) (*kmsg.FindC
 	return coordinatorResponse, nil
 }
 
-func (c *Controller) InitProducer(transactionalID *string, transactionTimeoutDuration time.Duration) (*kmsg.InitProducerIDResponse, error) {
+func (c *Controller) InitProducer(transactionTimeoutDuration time.Duration) (*kmsg.InitProducerIDResponse, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
 	request := kmsg.NewPtrInitProducerIDRequest()
-	request.TransactionalID = transactionalID
+	request.TransactionalID = nil
 	request.TransactionTimeoutMillis = int32(transactionTimeoutDuration.Milliseconds())
 
 	response, err := c.franzKafkaClient.Request(ctx, request)
