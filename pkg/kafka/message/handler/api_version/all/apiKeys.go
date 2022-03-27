@@ -9,19 +9,22 @@ import (
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/describe_groups"
 	implDescribeGroupsV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_groups/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/fetch"
+	implFetchV1 "github.com/rmb938/krouter/pkg/kafka/message/impl/fetch/v1"
 	implFetchV11 "github.com/rmb938/krouter/pkg/kafka/message/impl/fetch/v11"
-	implFetchV4 "github.com/rmb938/krouter/pkg/kafka/message/impl/fetch/v4"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/find_coordinator"
+	implFindCoordinatorV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/find_coordinator/v0"
 	implFindCoordinatorV2 "github.com/rmb938/krouter/pkg/kafka/message/impl/find_coordinator/v2"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/heartbeat"
 	implHeartbeatV3 "github.com/rmb938/krouter/pkg/kafka/message/impl/heartbeat/v3"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/init_producer_id"
+	initProducerIDv0 "github.com/rmb938/krouter/pkg/kafka/message/impl/init_producer_id/v0"
 	initProducerIDv1 "github.com/rmb938/krouter/pkg/kafka/message/impl/init_producer_id/v1"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/join_group"
 	implJoinGroupV5 "github.com/rmb938/krouter/pkg/kafka/message/impl/join_group/v5"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group"
 	implLeaveGroupV3 "github.com/rmb938/krouter/pkg/kafka/message/impl/leave_group/v3"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets"
+	implListOffsetsV1 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v1"
 	implListOffsetsV5 "github.com/rmb938/krouter/pkg/kafka/message/impl/list_offsets/v5"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/metadata"
 	metadatav0 "github.com/rmb938/krouter/pkg/kafka/message/impl/metadata/v0"
@@ -31,7 +34,7 @@ import (
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch"
 	implOffsetFetchv4 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch/v4"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/produce"
-	producev3 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v3"
+	producev1 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v1"
 	producev7 "github.com/rmb938/krouter/pkg/kafka/message/impl/produce/v7"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group"
 	implSyncGroupV3 "github.com/rmb938/krouter/pkg/kafka/message/impl/sync_group/v3"
@@ -44,7 +47,7 @@ type APIKey struct {
 
 var APIKeys = map[int16]APIKey{
 	produce.Key: {
-		MinVersion: producev3.Version,
+		MinVersion: producev1.Version,
 		MaxVersion: producev7.Version,
 	},
 	metadata.Key: {
@@ -56,11 +59,11 @@ var APIKeys = map[int16]APIKey{
 		MaxVersion: apiVersionv2.Version,
 	},
 	init_producer_id.Key: {
-		MinVersion: initProducerIDv1.Version,
+		MinVersion: initProducerIDv0.Version,
 		MaxVersion: initProducerIDv1.Version,
 	},
 	find_coordinator.Key: {
-		MinVersion: implFindCoordinatorV2.Version,
+		MinVersion: implFindCoordinatorV0.Version,
 		MaxVersion: implFindCoordinatorV2.Version,
 	},
 	join_group.Key: {
@@ -80,11 +83,11 @@ var APIKeys = map[int16]APIKey{
 		MaxVersion: implOffsetFetchv4.Version,
 	},
 	list_offsets.Key: {
-		MinVersion: implListOffsetsV5.Version,
+		MinVersion: implListOffsetsV1.Version,
 		MaxVersion: implListOffsetsV5.Version,
 	},
 	fetch.Key: {
-		MinVersion: implFetchV4.Version,
+		MinVersion: implFetchV1.Version,
 		MaxVersion: implFetchV11.Version,
 	},
 	heartbeat.Key: {

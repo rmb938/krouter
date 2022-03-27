@@ -1,4 +1,4 @@
-package v4
+package v1
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
-	v4 "github.com/rmb938/krouter/pkg/kafka/message/impl/fetch/v4"
+	v1 "github.com/rmb938/krouter/pkg/kafka/message/impl/fetch/v1"
 	"github.com/rmb938/krouter/pkg/net/message"
 	"github.com/twmb/franz-go/pkg/kmsg"
 )
@@ -17,22 +17,16 @@ type Handler struct {
 }
 
 func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
-	log = log.WithName("fetch-v4-handler")
+	log = log.WithName("fetch-v1-handler")
 
-	request := message.(*v4.Request)
+	request := message.(*v1.Request)
 
-	response := &v4.Response{}
-
-	responseSize := int64(0)
+	response := &v1.Response{}
 
 	for _, requestedTopic := range request.Topics {
 		log = log.WithValues("topic", requestedTopic.Name)
 
-		if responseSize >= int64(request.MaxBytes) {
-			continue
-		}
-
-		topicResponse := v4.FetchTopicResponse{
+		topicResponse := v1.FetchTopicResponse{
 			Topic: requestedTopic.Name,
 		}
 
@@ -41,11 +35,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 		for _, partition := range requestedTopic.Partitions {
 			log = log.WithValues("partition", partition.Partition)
 
-			if responseSize >= int64(request.MaxBytes) {
-				continue
-			}
-
-			partitionResponse := v4.FetchPartitionResponse{
+			partitionResponse := v1.FetchPartitionResponse{
 				PartitionIndex: partition.Partition,
 			}
 
@@ -59,8 +49,6 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 			kafkaFetchRequest.ReplicaID = -1
 			kafkaFetchRequest.MaxWaitMillis = int32(request.MaxWait.Milliseconds())
 			kafkaFetchRequest.MinBytes = request.MinBytes
-			kafkaFetchRequest.MaxBytes = request.MaxBytes
-			kafkaFetchRequest.IsolationLevel = request.IsolationLevel
 
 			kafkaFetchRequestTopic := kmsg.NewFetchRequestTopic()
 			kafkaFetchRequestTopic.Topic = requestedTopic.Name
@@ -88,21 +76,12 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 
 			partitionResponse.ErrCode = errors.KafkaError(block.ErrorCode)
 			partitionResponse.HighWaterMark = block.HighWatermark
-			partitionResponse.LastStableOffset = block.LastStableOffset
-
-			for _, blockAbortedTransaction := range block.AbortedTransactions {
-				partitionResponse.AbortedTransactions = append(partitionResponse.AbortedTransactions, v4.FetchAbortedTransaction{
-					ProducerID:  blockAbortedTransaction.ProducerID,
-					FirstOffset: blockAbortedTransaction.FirstOffset,
-				})
-			}
 
 			responseRecordByteBuff := bytes.NewBuffer([]byte{})
 			responseRecordByteBuff.Write(block.RecordBatches)
 
 			responseRecordByteBuffLen := responseRecordByteBuff.Len()
 			if responseRecordByteBuffLen > 0 {
-				responseSize += int64(responseRecordByteBuffLen)
 				partitionResponse.Records = responseRecordByteBuff.Bytes()
 			}
 
