@@ -18,14 +18,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 
 	response := &v1.Response{}
 
-	response.ThrottleDuration = 0
-
-	response.ErrCode = errors.None
-	if request.TransactionalID != nil {
-		response.ErrCode = errors.TransactionIDAuthorizationFailed
-	}
-
-	kafkaResponse, err := broker.GetController().InitProducer(request.TransactionTimeoutDuration)
+	kafkaResponse, err := broker.GetController().InitProducer(request.TransactionalID, request.TransactionTimeoutDuration)
 	if err != nil {
 		return nil, err
 	}
