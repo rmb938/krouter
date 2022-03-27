@@ -25,10 +25,13 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 		return response, nil
 	}
 
+	response.Responses = make([]v3.ProduceResponse, 0, len(request.TopicData))
+
 	if request.TransactionalID != nil {
 		for _, topicData := range request.TopicData {
 			produceResponse := v3.ProduceResponse{
-				Name: topicData.Name,
+				Name:               topicData.Name,
+				PartitionResponses: make([]v3.PartitionResponse, 0, len(topicData.PartitionData)),
 			}
 			for _, partitionData := range topicData.PartitionData {
 				partitionResponse := v3.PartitionResponse{
@@ -43,14 +46,14 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 		return response, nil
 	}
 
-	// get cluster from first topic since all topics and partitions in this request should be to the same backend
-	//  if our cache has the wrong one some (or all) of our topics will error and the client will refresh metadata
-	cluster, _ := broker.GetTopic(request.TopicData[0].Name)
+	topicRequestByCluster := make(map[*logical_broker.Cluster][]kmsg.ProduceRequestTopic)
+	for _, topicData := range request.TopicData {
+		cluster := broker.GetClusterByTopic(topicData.Name)
 
-	if cluster == nil {
-		for _, topicData := range request.TopicData {
+		if cluster == nil {
 			produceResponse := v3.ProduceResponse{
-				Name: topicData.Name,
+				Name:               topicData.Name,
+				PartitionResponses: make([]v3.PartitionResponse, 0, len(topicData.PartitionData)),
 			}
 			for _, partitionData := range topicData.PartitionData {
 				partitionResponse := v3.PartitionResponse{
@@ -62,54 +65,63 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 			response.Responses = append(response.Responses, produceResponse)
 		}
 
-		return response, nil
-	}
+		topicRequests, ok := topicRequestByCluster[cluster]
+		if !ok {
+			topicRequests = make([]kmsg.ProduceRequestTopic, 0)
+		}
 
-	var produceTopics []kmsg.ProduceRequestTopic
-	for _, topicData := range request.TopicData {
-		produceTopic := kmsg.NewProduceRequestTopic()
-		produceTopic.Topic = topicData.Name
+		topicRequest := kmsg.NewProduceRequestTopic()
+		topicRequest.Topic = topicData.Name
+		topicRequest.Partitions = make([]kmsg.ProduceRequestTopicPartition, 0, len(topicData.PartitionData))
 
 		for _, partitionData := range topicData.PartitionData {
 			produceTopicPartition := kmsg.NewProduceRequestTopicPartition()
+
 			produceTopicPartition.Partition = partitionData.Index
 			produceTopicPartition.Records = partitionData.Records
 
-			produceTopic.Partitions = append(produceTopic.Partitions, produceTopicPartition)
+			topicRequest.Partitions = append(topicRequest.Partitions, produceTopicPartition)
 		}
 
-		produceTopics = append(produceTopics, produceTopic)
+		topicRequestByCluster[cluster] = append(topicRequests, topicRequest)
 	}
 
-	kafkaResponse, err := cluster.Produce(request.TransactionalID, int32(request.TimeoutDuration.Milliseconds()), produceTopics)
-	if err != nil {
-		log.Error(err, "Error producing message to backend cluster")
-		return nil, fmt.Errorf("error producing to kafka: %w", err)
+	for cluster, produceRequests := range topicRequestByCluster {
+		kafkaResponse, err := cluster.Produce(request.TransactionalID, int32(request.TimeoutDuration.Milliseconds()), produceRequests)
+		if err != nil {
+			log.Error(err, "Error producing message to backend cluster")
+			return nil, fmt.Errorf("error producing to kafka: %w", err)
+		}
+
+		if request.ACKs != 0 {
+			if kafkaResponse.ThrottleMillis > int32(response.ThrottleDuration) {
+				response.ThrottleDuration = time.Duration(kafkaResponse.ThrottleMillis) * time.Millisecond
+			}
+
+			for _, kafkaRespTopic := range kafkaResponse.Topics {
+				produceResponse := v3.ProduceResponse{
+					Name:               kafkaRespTopic.Topic,
+					PartitionResponses: make([]v3.PartitionResponse, 0, len(kafkaRespTopic.Partitions)),
+				}
+
+				for _, kafkaRespTopicPartition := range kafkaRespTopic.Partitions {
+					produceResponsePartition := v3.PartitionResponse{
+						Index:         kafkaRespTopicPartition.Partition,
+						ErrCode:       errors.KafkaError(kafkaRespTopicPartition.ErrorCode),
+						BaseOffset:    kafkaRespTopicPartition.BaseOffset,
+						LogAppendTime: time.UnixMilli(kafkaRespTopicPartition.LogAppendTime),
+					}
+
+					produceResponse.PartitionResponses = append(produceResponse.PartitionResponses, produceResponsePartition)
+				}
+
+				response.Responses = append(response.Responses, produceResponse)
+			}
+		}
 	}
 
 	if request.ACKs == 0 {
 		return nil, nil
-	}
-
-	response.ThrottleDuration = time.Duration(kafkaResponse.ThrottleMillis) * time.Millisecond
-
-	for _, kafkaRespTopic := range kafkaResponse.Topics {
-		produceResponse := v3.ProduceResponse{
-			Name: kafkaRespTopic.Topic,
-		}
-
-		for _, kafkaRespTopicPartition := range kafkaRespTopic.Partitions {
-			produceResponsePartition := v3.PartitionResponse{
-				Index:         kafkaRespTopicPartition.Partition,
-				ErrCode:       errors.KafkaError(kafkaRespTopicPartition.ErrorCode),
-				BaseOffset:    kafkaRespTopicPartition.BaseOffset,
-				LogAppendTime: time.UnixMilli(kafkaRespTopicPartition.LogAppendTime),
-			}
-
-			produceResponse.PartitionResponses = append(produceResponse.PartitionResponses, produceResponsePartition)
-		}
-
-		response.Responses = append(response.Responses, produceResponse)
 	}
 
 	return response, nil

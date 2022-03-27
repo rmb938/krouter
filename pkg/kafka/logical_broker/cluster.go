@@ -190,11 +190,11 @@ func (c *Cluster) Produce(transactionID *string, timeoutMillis int32, topics []k
 	return response.(*kmsg.ProduceResponse), nil
 }
 
-func (c *Cluster) ListOffsets(topic *topics.Topic, partition int32, request *kmsg.ListOffsetsRequest) (*kmsg.ListOffsetsResponse, error) {
+func (c *Cluster) ListOffsets(topicName string, partition int32, request *kmsg.ListOffsetsRequest) (*kmsg.ListOffsetsResponse, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	leaderID, err := c.topicLeader(topic.Name, partition)
+	leaderID, err := c.topicLeader(topicName, partition)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func (c *Cluster) ListOffsets(topic *topics.Topic, partition int32, request *kms
 		response := kmsg.NewPtrListOffsetsResponse()
 
 		responseTopic := kmsg.NewListOffsetsResponseTopic()
-		responseTopic.Topic = topic.Name
+		responseTopic.Topic = topicName
 
 		responsePartition := kmsg.NewListOffsetsResponseTopicPartition()
 		responsePartition.Partition = partition
@@ -224,11 +224,11 @@ func (c *Cluster) ListOffsets(topic *topics.Topic, partition int32, request *kms
 	return response.(*kmsg.ListOffsetsResponse), nil
 }
 
-func (c *Cluster) Fetch(topic *topics.Topic, partition int32, request *kmsg.FetchRequest) (*kmsg.FetchResponse, error) {
+func (c *Cluster) Fetch(topicName string, partition int32, request *kmsg.FetchRequest) (*kmsg.FetchResponse, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	leaderID, err := c.topicLeader(topic.Name, partition)
+	leaderID, err := c.topicLeader(topicName, partition)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +239,7 @@ func (c *Cluster) Fetch(topic *topics.Topic, partition int32, request *kmsg.Fetc
 		response.SessionID = request.SessionID
 
 		responseTopic := kmsg.NewFetchResponseTopic()
-		responseTopic.Topic = topic.Name
+		responseTopic.Topic = topicName
 
 		responseTopicPartition := kmsg.NewFetchResponseTopicPartition()
 		responseTopicPartition.Partition = partition

@@ -54,7 +54,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 	for _, topicName := range topics {
 		log = log.WithValues("topic", topicName)
 
-		cluster, _ := logicalBroker.GetTopic(topicName)
+		cluster := logicalBroker.GetClusterByTopic(topicName)
 
 		if cluster == nil {
 			log.Error(nil, "Client tried to get metadata for a topic that doesn't exist")
@@ -73,12 +73,8 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 		uniqueClusters[cluster] = append(uniqueClusters[cluster], topicName)
 	}
 
-	currentBrokerId := int32(10000)
 	for cluster, topics := range uniqueClusters {
 		log = log.WithValues("cluster", cluster.Name)
-
-		clusterBrokerIDMap := make(map[int32]int32)
-		clusterBrokerIDMap[-1] = -1 // pre-populate -1 since it's always the same
 
 		kafkaMetadata, err := cluster.TopicMetadata(context.TODO(), topics)
 		if err != nil {
@@ -90,17 +86,6 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 			response.ThrottleDuration = time.Duration(kafkaMetadata.ThrottleMillis) * time.Millisecond
 		}
 
-		for _, broker := range kafkaMetadata.Brokers {
-			response.Brokers = append(response.Brokers, metadatav8.Brokers{
-				ID:   currentBrokerId,
-				Host: logicalBroker.AdvertiseListener.IP.String(),
-				Port: int32(logicalBroker.AdvertiseListener.Port),
-				Rack: func(s string) *string { return &s }("rack"),
-			})
-			clusterBrokerIDMap[broker.NodeID] = currentBrokerId
-			currentBrokerId += 1
-		}
-
 		for _, topic := range kafkaMetadata.Topics {
 			responseTopic := metadatav8.Topics{
 				ErrCode:  errors.KafkaError(topic.ErrorCode),
@@ -110,54 +95,19 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 
 			for _, partition := range topic.Partitions {
 				responsePartition := metadatav8.Partitions{
-					ErrCode:     errors.KafkaError(partition.ErrorCode),
-					Index:       partition.Partition,
-					LeaderEpoch: partition.LeaderEpoch,
-				}
-
-				responsePartition.LeaderID = clusterBrokerIDMap[partition.Leader]
-
-				// convert the partition broker id's to ours
-				for _, replicaID := range partition.Replicas {
-					responsePartition.ReplicaNodes = append(responsePartition.ReplicaNodes, clusterBrokerIDMap[replicaID])
-				}
-
-				for _, isr := range partition.ISR {
-					responsePartition.ISRNodes = append(responsePartition.ISRNodes, clusterBrokerIDMap[isr])
-				}
-
-				for _, offline := range partition.OfflineReplicas {
-					responsePartition.OfflineReplicas = append(responsePartition.OfflineReplicas, clusterBrokerIDMap[offline])
+					ErrCode:         errors.KafkaError(partition.ErrorCode),
+					Index:           partition.Partition,
+					LeaderEpoch:     partition.LeaderEpoch,
+					LeaderID:        response.ControllerID,
+					ReplicaNodes:    []int32{response.ControllerID},
+					ISRNodes:        []int32{response.ControllerID},
+					OfflineReplicas: []int32{},
 				}
 
 				responseTopic.Partitions = append(responseTopic.Partitions, responsePartition)
 			}
 
 			response.Topics = append(response.Topics, responseTopic)
-		}
-	}
-
-	// get metadata for all clusters
-	for _, cluster := range logicalBroker.GetClusters() {
-		if _, ok := uniqueClusters[cluster]; ok {
-			// if we already got it via topics skip it
-			continue
-		}
-
-		kafkaMetadata, err := cluster.TopicMetadata(context.TODO(), nil)
-		if err != nil {
-			log.Error(err, "error fetching metadata for brokers from kafka")
-			return nil, fmt.Errorf("error fetching metadata for brokers from kafka: %w", err)
-		}
-
-		for range kafkaMetadata.Brokers {
-			response.Brokers = append(response.Brokers, metadatav8.Brokers{
-				ID:   currentBrokerId,
-				Host: logicalBroker.AdvertiseListener.IP.String(),
-				Port: int32(logicalBroker.AdvertiseListener.Port),
-				Rack: func(s string) *string { return &s }("rack"),
-			})
-			currentBrokerId += 1
 		}
 	}
 

@@ -214,6 +214,16 @@ func (b *Broker) GetTopics() ([]*topics.Topic, error) {
 	return allTopics, nil
 }
 
+func (b *Broker) GetClusterByTopic(topicName string) *Cluster {
+	if clusterName, ok := b.controller.topicPointers.Load(topicName); ok {
+		if cluster, ok := b.clusters[clusterName]; ok {
+			return cluster
+		}
+	}
+
+	return nil
+}
+
 func (b *Broker) GetTopic(topicName string) (*Cluster, *topics.Topic) {
 
 	if clusterName, ok := b.controller.topicPointers.Load(topicName); ok {

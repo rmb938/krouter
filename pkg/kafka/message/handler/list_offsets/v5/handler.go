@@ -26,14 +26,14 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 			Name: requestTopic.Name,
 		}
 
-		cluster, topic := broker.GetTopic(requestTopic.Name)
+		cluster := broker.GetClusterByTopic(requestTopic.Name)
 
 		for _, partition := range requestTopic.Partitions {
 			partitionResponse := v5.ListOffsetsPartitionResponse{
 				PartitionIndex: partition.PartitionIndex,
 			}
 
-			if topic == nil {
+			if cluster == nil {
 				partitionResponse.ErrCode = errors.UnknownTopicOrPartition
 				topicResponse.Partitions = append(topicResponse.Partitions, partitionResponse)
 				continue
@@ -43,7 +43,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 			kafkaOffsetRequest.IsolationLevel = request.IsolationLevel
 
 			kafkaOffsetRequestTopic := kmsg.NewListOffsetsRequestTopic()
-			kafkaOffsetRequestTopic.Topic = topic.Name
+			kafkaOffsetRequestTopic.Topic = requestTopic.Name
 
 			kafkaOffsetRequestTopicPartition := kmsg.NewListOffsetsRequestTopicPartition()
 			kafkaOffsetRequestTopicPartition.Partition = partition.PartitionIndex
@@ -54,7 +54,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 
 			kafkaOffsetRequest.Topics = append(kafkaOffsetRequest.Topics, kafkaOffsetRequestTopic)
 
-			kafkaOffsetResponse, err := cluster.ListOffsets(topic, partition.PartitionIndex, kafkaOffsetRequest)
+			kafkaOffsetResponse, err := cluster.ListOffsets(requestTopic.Name, partition.PartitionIndex, kafkaOffsetRequest)
 			if err != nil {
 				log.Error(err, "error listing offsets to backend cluster")
 				return nil, fmt.Errorf("error listing offsets to backend cluster: %w", err)

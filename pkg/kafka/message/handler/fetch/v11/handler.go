@@ -39,7 +39,7 @@ topicLoop:
 			Topic: requestedTopic.Name,
 		}
 
-		cluster, topic := broker.GetTopic(requestedTopic.Name)
+		cluster := broker.GetClusterByTopic(requestedTopic.Name)
 
 		for _, partition := range requestedTopic.Partitions {
 			log = log.WithValues("partition", partition.Partition)
@@ -53,7 +53,7 @@ topicLoop:
 				PreferredReadReplica: 1,
 			}
 
-			if topic == nil {
+			if cluster == nil {
 				partitionResponse.ErrCode = errors.UnknownTopicOrPartition
 				topicResponse.Partitions = append(topicResponse.Partitions, partitionResponse)
 				continue
@@ -70,7 +70,7 @@ topicLoop:
 			kafkaFetchRequest.Rack = request.RackID
 
 			kafkaFetchRequestTopic := kmsg.NewFetchRequestTopic()
-			kafkaFetchRequestTopic.Topic = topic.Name
+			kafkaFetchRequestTopic.Topic = requestedTopic.Name
 
 			kafkaFetchRequestTopicPartition := kmsg.NewFetchRequestTopicPartition()
 			kafkaFetchRequestTopicPartition.Partition = partition.Partition
@@ -83,7 +83,7 @@ topicLoop:
 
 			kafkaFetchRequest.Topics = append(kafkaFetchRequest.Topics, kafkaFetchRequestTopic)
 
-			kafkaFetchResponse, err := cluster.Fetch(topic, partition.Partition, kafkaFetchRequest)
+			kafkaFetchResponse, err := cluster.Fetch(requestedTopic.Name, partition.Partition, kafkaFetchRequest)
 			if err != nil {
 				log.Error(err, "Error fetch to backend cluster")
 				return nil, fmt.Errorf("error fetchto backend cluster: %w", err)

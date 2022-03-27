@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"math"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -41,7 +42,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 	} else {
 		response.ErrCode = errors.None
 		response.ErrMessage = nil
-		response.NodeID = kafkaResponse.NodeID
+		response.NodeID = math.MaxInt32
 		response.Host = broker.AdvertiseListener.IP.String()
 		response.Port = int32(broker.AdvertiseListener.Port)
 	}
