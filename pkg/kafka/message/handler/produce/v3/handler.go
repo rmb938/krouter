@@ -46,6 +46,25 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 		return response, nil
 	}
 
+	if request.ACKs < -1 || request.ACKs > 1 {
+		for _, topicData := range request.TopicData {
+			produceResponse := v3.ProduceResponse{
+				Name:               topicData.Name,
+				PartitionResponses: make([]v3.PartitionResponse, 0, len(topicData.PartitionData)),
+			}
+			for _, partitionData := range topicData.PartitionData {
+				partitionResponse := v3.PartitionResponse{
+					Index:   partitionData.Index,
+					ErrCode: errors.InvalidRequiredAcks,
+				}
+				produceResponse.PartitionResponses = append(produceResponse.PartitionResponses, partitionResponse)
+			}
+			response.Responses = append(response.Responses, produceResponse)
+		}
+
+		return response, nil
+	}
+
 	topicRequestByCluster := make(map[*logical_broker.Cluster][]kmsg.ProduceRequestTopic)
 	for _, topicData := range request.TopicData {
 		cluster := broker.GetClusterByTopic(topicData.Name)
