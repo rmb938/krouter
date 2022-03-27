@@ -1,4 +1,4 @@
-package v4
+package v1
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
-	v4 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch/v4"
+	v1 "github.com/rmb938/krouter/pkg/kafka/message/impl/offset_fetch/v1"
 	"github.com/rmb938/krouter/pkg/net/message"
 )
 
@@ -14,25 +14,23 @@ type Handler struct {
 }
 
 func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
-	log = log.WithName("offset-fetch-v4-handler")
+	log = log.WithName("offset-fetch-v1-handler")
 
-	request := message.(*v4.Request)
+	request := message.(*v1.Request)
 
 	log = log.WithValues("group-id", request.GroupID)
 
-	response := &v4.Response{
-		ErrCode: errors.None,
-	}
+	response := &v1.Response{}
 
 	for _, requestTopic := range request.Topics {
-		offsetFetchTopic := v4.ResponseOffsetFetchTopic{
+		offsetFetchTopic := v1.ResponseOffsetFetchTopic{
 			Name: requestTopic.Name,
 		}
 
 		_, topic := broker.GetTopic(requestTopic.Name)
 
 		for _, partitionIndex := range requestTopic.PartitionIndexes {
-			offsetFetchTopicPartition := v4.ResponseOffsetFetchTopicPartition{
+			offsetFetchTopicPartition := v1.ResponseOffsetFetchTopicPartition{
 				PartitionIndex: partitionIndex,
 				Metadata:       nil,
 				ErrCode:        errors.None,
@@ -74,12 +72,12 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 		}
 
 		for topicName, partitionInfo := range offsets {
-			offsetFetchTopic := v4.ResponseOffsetFetchTopic{
+			offsetFetchTopic := v1.ResponseOffsetFetchTopic{
 				Name: topicName,
 			}
 
 			for partitionIndex, offset := range partitionInfo {
-				offsetFetchTopic.Partitions = append(offsetFetchTopic.Partitions, v4.ResponseOffsetFetchTopicPartition{
+				offsetFetchTopic.Partitions = append(offsetFetchTopic.Partitions, v1.ResponseOffsetFetchTopicPartition{
 					PartitionIndex:  partitionIndex,
 					CommittedOffset: offset,
 					Metadata:        nil,

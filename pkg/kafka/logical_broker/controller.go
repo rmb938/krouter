@@ -61,6 +61,7 @@ func (c *Controller) initFranzKafkaClient() error {
 	maxVersions := kversion.Stable()
 	// need to pin the max version of sync_group due to protocol setting in newer versions
 	// we support version 3, version 4 just adds tagged fields
+	// TODO: figure out how to not need this
 	maxVersions.SetMaxKeyVersion(sync_group.Key, 4)
 
 	var err error
