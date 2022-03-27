@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker/franz"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	"github.com/twmb/franz-go/pkg/kmsg"
 )
@@ -93,7 +94,7 @@ func (c *Controller) JoinGroup(request *kmsg.JoinGroupRequest) (*kmsg.JoinGroupR
 	return joinGroupResponse, err
 }
 
-func (c *Controller) SyncGroup(request *kmsg.SyncGroupRequest) (*kmsg.SyncGroupResponse, error) {
+func (c *Controller) SyncGroupCustom(request *franz.SyncGroupRequest) (*kmsg.SyncGroupResponse, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
