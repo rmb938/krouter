@@ -225,13 +225,10 @@ func (b *Broker) GetClusterByTopic(topicName string) *Cluster {
 }
 
 func (b *Broker) GetTopic(topicName string) (*Cluster, *topics.Topic) {
-
-	if clusterName, ok := b.controller.topicPointers.Load(topicName); ok {
-		if cluster, ok := b.clusters[clusterName]; ok {
-			topic, ok := cluster.topics.Load(topicName)
-			if ok {
-				return cluster, topic
-			}
+	if cluster := b.GetClusterByTopic(topicName); cluster != nil {
+		topic, ok := cluster.topics.Load(topicName)
+		if ok {
+			return cluster, topic
 		}
 	}
 
