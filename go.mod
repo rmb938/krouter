@@ -9,13 +9,13 @@ require (
 	github.com/go-redis/redis/v8 v8.11.4
 	github.com/google/uuid v1.0.0
 	github.com/hashicorp/go-multierror v1.1.1
-	github.com/klauspost/compress v1.14.4
+	github.com/klauspost/compress v1.15.1
 	github.com/outcaste-io/ristretto v0.2.0
 	github.com/pierrec/lz4 v2.6.1+incompatible
 	github.com/puzpuzpuz/xsync v1.2.0
-	github.com/twmb/franz-go v1.4.0
-	github.com/twmb/franz-go/pkg/kadm v0.0.0-20220319065723-845bc50e6da0
-	github.com/twmb/franz-go/pkg/kmsg v0.0.0-20220310045829-806cf534caf0
+	github.com/twmb/franz-go v1.4.2
+	github.com/twmb/franz-go/pkg/kadm v0.0.0-20220325061325-af694554cdf9
+	github.com/twmb/franz-go/pkg/kmsg v1.0.0
 	go.uber.org/zap v1.14.1
 )
 
