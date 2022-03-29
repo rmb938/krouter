@@ -1,9 +1,9 @@
-package topics
+package models
 
 type Topic struct {
-	Name       string             `json:"name"`
-	Partitions int32              `json:"partitions"`
-	Config     map[string]*string `json:"config"`
+	Name       string
+	Partitions int32
+	Config     map[string]*string
 }
 
 func (t *Topic) Clone() *Topic {

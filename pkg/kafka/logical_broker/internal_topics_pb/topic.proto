@@ -1,0 +1,25 @@
+syntax = "proto3";
+package proto;
+
+option go_package = ".;internal_topics_pb";
+
+import "google/protobuf/wrappers.proto";
+
+message Topic {
+  string name = 1;
+  int32 partitions = 2;
+  map<string, google.protobuf.StringValue> config = 3;
+}
+
+message TopicMessageValue {
+  enum Action {
+    ACTION_CREATE = 0;
+    ACTION_UPDATE = 1;
+    ACTION_DELETE = 2;
+  }
+
+  string name = 1;
+  Action action = 2;
+  string cluster = 3;
+  Topic topic = 4;
+}

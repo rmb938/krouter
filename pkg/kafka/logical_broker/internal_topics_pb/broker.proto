@@ -1,0 +1,18 @@
+syntax = "proto3";
+package proto;
+
+option go_package = ".;internal_topics_pb";
+
+message BrokerMessageKey {
+  int32 broker_id = 1;
+}
+
+message BrokerEndpoint {
+  string host = 1;
+  int32 port = 2;
+}
+
+message BrokerMessageValue {
+  BrokerEndpoint endpoint = 1;
+  string rack = 2;
+}

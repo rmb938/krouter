@@ -2,24 +2,18 @@ package logical_broker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker/internal_topics_pb"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
 	InternalTopicTopicLeader = "__krouter_topic_leaders"
 )
-
-type TopicLeaderMessage struct {
-	Name      string `json:"name"`
-	Cluster   string `json:"cluster"`
-	Partition int32  `json:"partition"`
-	Leader    int    `json:"leader"`
-}
 
 func (c *Cluster) ConsumeTopicLeaders() {
 	kafkaClient, err := c.controller.newFranzKafkaClient(InternalTopicTopicLeader)
@@ -66,12 +60,12 @@ func (c *Cluster) ConsumeTopicLeaders() {
 			key := string(record.Key)
 
 			if key != InternalControlKey {
-				topicLeaderMessage := &TopicLeaderMessage{}
-				err := json.Unmarshal(record.Value, topicLeaderMessage)
+				topicLeaderMessage := &internal_topics_pb.TopicLeaderMessageValue{}
+				err := proto.Unmarshal(record.Value, topicLeaderMessage)
 				if err != nil {
 					// We don't exit and return here because it'll crash all instances
 					//  instead we just ignore the message
-					c.log.Error(err, "error parsing topic leader", "key", key, "data", string(record.Value))
+					c.log.Error(err, "error parsing topic leader", "key", key)
 				}
 
 				if topicLeaderMessage.Cluster == c.Name {

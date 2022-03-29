@@ -7,7 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
-	"github.com/rmb938/krouter/pkg/kafka/logical_broker/topics"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker/models"
 	"github.com/rmb938/krouter/pkg/redisw"
 )
 
@@ -83,14 +83,11 @@ func (b *Broker) InitClusters() error {
 		return err
 	}
 
-	err = b.controller.CreateInternalTopics()
+	err = b.controller.Start()
 	if err != nil {
 		return err
 	}
-
-	go b.controller.ConsumeTopicPointers()
-	b.controller.WaitSynced()
-	b.log.Info("Controller Synced")
+	b.log.Info("Controller Started")
 
 	// TODO: remove this it's temporary
 	pointer, err := b.controller.APIGetTopicPointer("test1")
@@ -197,17 +194,17 @@ func (b *Broker) GetClusters() map[string]*Cluster {
 	return b.clusters
 }
 
-func (b *Broker) GetTopics() ([]*topics.Topic, error) {
-	var allTopics []*topics.Topic
+func (b *Broker) GetTopics() ([]*models.Topic, error) {
+	var allTopics []*models.Topic
 
 	for _, cluster := range b.clusters {
-		cluster.topics.Range(func(topicName string, topic *topics.Topic) bool {
+		cluster.topics.Range(func(topicName string, topic *models.Topic) bool {
 			if clusterName, ok := b.controller.topicPointers.Load(topicName); ok {
 				if clusterName == cluster.Name {
 					allTopics = append(allTopics, topic)
 				}
 			}
-			return false
+			return true
 		})
 	}
 
@@ -224,7 +221,7 @@ func (b *Broker) GetClusterByTopic(topicName string) *Cluster {
 	return nil
 }
 
-func (b *Broker) GetTopic(topicName string) (*Cluster, *topics.Topic) {
+func (b *Broker) GetTopic(topicName string) (*Cluster, *models.Topic) {
 	if cluster := b.GetClusterByTopic(topicName); cluster != nil {
 		if topic, ok := cluster.topics.Load(topicName); ok {
 			return cluster, topic

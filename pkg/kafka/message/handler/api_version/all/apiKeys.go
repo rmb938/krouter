@@ -4,6 +4,10 @@ import (
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/api_version"
 	apiVersionv0 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v0"
 	apiVersionv2 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v2"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/create_acls"
+	implCreateAclsV1 "github.com/rmb938/krouter/pkg/kafka/message/impl/create_acls/v1"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/describe_acls"
+	implDescribeAclsV1 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_acls/v1"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/describe_configs"
 	implDescribeConfigsV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_configs/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/describe_groups"
@@ -111,5 +115,13 @@ var APIKeys = map[int16]APIKey{
 	describe_configs.Key: {
 		MinVersion: implDescribeConfigsV0.Version,
 		MaxVersion: implDescribeConfigsV0.Version,
+	},
+	describe_acls.Key: {
+		MinVersion: implDescribeAclsV1.Version,
+		MaxVersion: implDescribeAclsV1.Version,
+	},
+	create_acls.Key: {
+		MinVersion: implCreateAclsV1.Version,
+		MaxVersion: implCreateAclsV1.Version,
 	},
 }

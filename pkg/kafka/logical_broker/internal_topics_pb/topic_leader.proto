@@ -1,0 +1,11 @@
+syntax = "proto3";
+package proto;
+
+option go_package = ".;internal_topics_pb";
+
+message TopicLeaderMessageValue {
+  string name = 1;
+  string cluster = 2;
+  int32 partition = 3;
+  int32 leader = 4;
+}

@@ -2,17 +2,18 @@ package logical_broker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 
 	"github.com/go-logr/logr"
 	"github.com/outcaste-io/ristretto"
 	"github.com/puzpuzpuz/xsync"
-	"github.com/rmb938/krouter/pkg/kafka/logical_broker/topics"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker/internal_topics_pb"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker/models"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -31,7 +32,7 @@ type Cluster struct {
 
 	franzKafkaClient *kgo.Client
 
-	topics           *xsync.MapOf[*topics.Topic]
+	topics           *xsync.MapOf[*models.Topic]
 	topicLeaderCache *ristretto.Cache
 }
 
@@ -43,7 +44,7 @@ func NewCluster(name string, addrs []string, log logr.Logger, controller *Contro
 		log:        log,
 		syncedChan: make(chan struct{}),
 		controller: controller,
-		topics:     xsync.NewMapOf[*topics.Topic](),
+		topics:     xsync.NewMapOf[*models.Topic](),
 	}
 
 	if err := cluster.initFranzKafkaClient(addrs); err != nil {
@@ -87,12 +88,12 @@ func (c *Cluster) Close() error {
 	return nil
 }
 
-func (c *Cluster) topicLeader(topic string, partition int32) (int, error) {
+func (c *Cluster) topicLeader(topic string, partition int32) (int32, error) {
 	brokerIDInterf, found := c.topicLeaderCache.Get(fmt.Sprintf(ClusterTopicLeaderKeyFmt, topic, partition))
 	if !found {
 		return -1, nil
 	}
-	return brokerIDInterf.(int), nil
+	return brokerIDInterf.(int32), nil
 }
 
 func (c *Cluster) TopicMetadata(ctx context.Context, topics []string) (*kmsg.MetadataResponse, error) {
@@ -125,18 +126,23 @@ func (c *Cluster) TopicMetadata(ctx context.Context, topics []string) (*kmsg.Met
 			}
 
 			// publish topic partition leader
-			topicLeaderMessage := &TopicLeaderMessage{
+			topicLeaderMessage := &internal_topics_pb.TopicLeaderMessageValue{
 				Name:      *topic.Topic,
 				Cluster:   c.Name,
 				Partition: partition.Partition,
-				Leader:    int(partition.Leader),
+				Leader:    partition.Leader,
 			}
-			topicLeaderMessageBytes, _ := json.Marshal(topicLeaderMessage)
-			record := kgo.KeySliceRecord([]byte(fmt.Sprintf("cluster-%s-topic-%s-partition-%d", c.Name, *topic.Topic, partition.Partition)), topicLeaderMessageBytes)
-			record.Topic = InternalTopicTopicLeader
-			produceResp := kafkaClient.ProduceSync(ctx, record)
-			if produceResp.FirstErr() != nil {
-				return nil, produceResp.FirstErr()
+			topicLeaderMessageBytes, err := proto.Marshal(topicLeaderMessage)
+			if err != nil {
+				c.log.Error(err, "error marshaling topic leader", "topic", *topic.Topic, "partition", partition.Partition, "leader", partition.Leader)
+			} else {
+				// TODO: do we make TopicLeaderMessageValue (without Leader) the key and Leader the value?
+				record := kgo.KeySliceRecord([]byte(fmt.Sprintf("cluster-%s-topic-%s-partition-%d", c.Name, *topic.Topic, partition.Partition)), topicLeaderMessageBytes)
+				record.Topic = InternalTopicTopicLeader
+				produceResp := kafkaClient.ProduceSync(ctx, record)
+				if produceResp.FirstErr() != nil {
+					return nil, produceResp.FirstErr()
+				}
 			}
 		}
 	}
@@ -182,7 +188,7 @@ func (c *Cluster) Produce(transactionID *string, timeoutMillis int32, topics []k
 		Topics:        topics,
 	}
 
-	response, err := c.franzKafkaClient.Broker(leaderID).RetriableRequest(ctx, req)
+	response, err := c.franzKafkaClient.Broker(int(leaderID)).RetriableRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +222,7 @@ func (c *Cluster) ListOffsets(topicName string, partition int32, request *kmsg.L
 		return response, nil
 	}
 
-	response, err := c.franzKafkaClient.Broker(leaderID).RetriableRequest(ctx, request)
+	response, err := c.franzKafkaClient.Broker(int(leaderID)).RetriableRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +258,7 @@ func (c *Cluster) Fetch(topicName string, partition int32, request *kmsg.FetchRe
 		return response, nil
 	}
 
-	response, err := c.franzKafkaClient.Broker(leaderID).RetriableRequest(ctx, request)
+	response, err := c.franzKafkaClient.Broker(int(leaderID)).RetriableRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}

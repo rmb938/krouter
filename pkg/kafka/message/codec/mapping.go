@@ -5,6 +5,8 @@ import (
 
 	apiVersionV0 "github.com/rmb938/krouter/pkg/kafka/message/codec/api_version/v0"
 	apiVersionV2 "github.com/rmb938/krouter/pkg/kafka/message/codec/api_version/v2"
+	createAclsV1 "github.com/rmb938/krouter/pkg/kafka/message/codec/create_acls/v1"
+	describeAclsV1 "github.com/rmb938/krouter/pkg/kafka/message/codec/describe_acls/v1"
 	describeConfigsV0 "github.com/rmb938/krouter/pkg/kafka/message/codec/describe_configs/v0"
 	describeGroupsV0 "github.com/rmb938/krouter/pkg/kafka/message/codec/describe_groups/v0"
 	fetchV1 "github.com/rmb938/krouter/pkg/kafka/message/codec/fetch/v1"
@@ -40,6 +42,10 @@ import (
 	implAPIVersion "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version"
 	implAPIVersionV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v0"
 	implAPIVersionV2 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v2"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/create_acls"
+	implCreateAclsV1 "github.com/rmb938/krouter/pkg/kafka/message/impl/create_acls/v1"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/describe_acls"
+	implDescribeAclsV1 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_acls/v1"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/describe_configs"
 	implDescribeConfigsV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_configs/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/describe_groups"
@@ -154,6 +160,12 @@ var MessageDecoderMapping = map[int16]map[int16]message.Decoder{
 	describe_configs.Key: {
 		implDescribeConfigsV0.Version: &describeConfigsV0.Decoder{},
 	},
+	describe_acls.Key: {
+		implDescribeAclsV1.Version: &describeAclsV1.Decoder{},
+	},
+	create_acls.Key: {
+		implCreateAclsV1.Version: &createAclsV1.Decoder{},
+	},
 }
 
 var MessageEncoderMapping = map[reflect.Type]message.Encoder{
@@ -190,4 +202,6 @@ var MessageEncoderMapping = map[reflect.Type]message.Encoder{
 	reflect.TypeOf(implOffsetCommitV4.Response{}):    &offsetCommitV4.Encoder{},
 	reflect.TypeOf(implDescribeGroupsV0.Response{}):  &describeGroupsV0.Encoder{},
 	reflect.TypeOf(implDescribeConfigsV0.Response{}): &describeConfigsV0.Encoder{},
+	reflect.TypeOf(implDescribeAclsV1.Response{}):    &describeAclsV1.Encoder{},
+	reflect.TypeOf(implCreateAclsV1.Response{}):      &createAclsV1.Encoder{},
 }

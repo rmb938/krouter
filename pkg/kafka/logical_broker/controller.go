@@ -12,10 +12,12 @@ import (
 type Controller struct {
 	log logr.Logger
 
-	syncedOnce sync.Once
-	syncedChan chan struct{}
+	topicPointerSyncOnce sync.Once
+	syncedChan           chan struct{}
 
 	redisClient *redisw.RedisClient
+
+	authorizer *Authorizer
 
 	kafkaAddrs       []string
 	franzKafkaClient *kgo.Client
@@ -34,6 +36,15 @@ func NewController(log logr.Logger, addrs []string, redisClient *redisw.RedisCli
 	}
 
 	err := controller.initFranzKafkaClient()
+	if err != nil {
+		return nil, err
+	}
+
+	authorizerKafkaClient, err := controller.newFranzKafkaClient(InternalTopicAcls)
+	if err != nil {
+		return nil, err
+	}
+	controller.authorizer, err = NewAuthorizer(log, authorizerKafkaClient)
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +79,31 @@ func (c *Controller) initFranzKafkaClient() error {
 	return nil
 }
 
-func (c *Controller) WaitSynced() {
+func (c *Controller) waitSynced() {
 	<-c.syncedChan
+}
+
+func (c *Controller) Start() error {
+	err := c.CreateInternalTopics()
+	if err != nil {
+		return err
+	}
+
+	err = c.authorizer.CreateTestACLs()
+	if err != nil {
+		return err
+	}
+
+	go c.ConsumeTopicPointers()
+	c.waitSynced()
+	c.log.Info("Controller Synced")
+
+	go c.authorizer.ConsumeAcls()
+	c.authorizer.WaitSynced()
+	c.log.Info("Authorizer Synced")
+	return nil
+}
+
+func (c *Controller) GetAuthorizer() *Authorizer {
+	return c.authorizer
 }

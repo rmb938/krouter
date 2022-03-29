@@ -2,32 +2,18 @@ package logical_broker
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"sync"
 
-	"github.com/rmb938/krouter/pkg/kafka/logical_broker/topics"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker/internal_topics_pb"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker/models"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
 	InternalTopicTopicConfig = "__krouter_topic_configs"
 )
-
-type TopicMessageAction string
-
-const (
-	TopicMessageActionCreate = "create"
-	TopicMessageActionUpdate = "update"
-	TopicMessageActionDelete = "delete"
-)
-
-type TopicMessage struct {
-	Name    string             `json:"name"`
-	Action  TopicMessageAction `json:"action"`
-	Cluster string             `json:"cluster"`
-	Topic   *topics.Topic      `json:"topic"`
-}
 
 func (c *Cluster) ConsumeTopicConfigs() {
 	kafkaClient, err := c.controller.newFranzKafkaClient(InternalTopicTopicConfig)
@@ -74,19 +60,34 @@ func (c *Cluster) ConsumeTopicConfigs() {
 			key := string(record.Key)
 
 			if key != InternalControlKey {
-				topicMessage := &TopicMessage{}
-				err := json.Unmarshal(record.Value, topicMessage)
+				topicMessage := &internal_topics_pb.TopicMessageValue{}
+				err := proto.Unmarshal(record.Value, topicMessage)
 				if err != nil {
 					// We don't exit and return here because it'll crash all instances
 					//  instead we just ignore the message
-					c.log.Error(err, "error parsing topic config", "key", key, "data", string(record.Value))
+					c.log.Error(err, "error parsing topic config", "key", key)
 				}
 
 				if topicMessage.Cluster == c.Name {
-					if topicMessage.Action == TopicMessageActionDelete {
+					if topicMessage.Action == internal_topics_pb.TopicMessageValue_ACTION_DELETE {
 						c.topics.Delete(topicMessage.Name)
 					} else {
-						c.topics.Store(topicMessage.Name, topicMessage.Topic)
+						topic := &models.Topic{
+							Name:       topicMessage.Topic.Name,
+							Partitions: topicMessage.Topic.Partitions,
+							Config:     make(map[string]*string),
+						}
+
+						for key, value := range topicMessage.Topic.Config {
+							var s *string
+							if value != nil {
+								s = &value.Value
+							}
+
+							topic.Config[key] = s
+						}
+
+						c.topics.Store(topicMessage.Name, topic)
 					}
 				}
 			}

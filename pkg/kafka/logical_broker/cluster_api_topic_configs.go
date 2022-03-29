@@ -2,16 +2,18 @@ package logical_broker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
-	"github.com/rmb938/krouter/pkg/kafka/logical_broker/topics"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker/internal_topics_pb"
+	"github.com/rmb938/krouter/pkg/kafka/logical_broker/models"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-func (c *Cluster) APICreateTopic(topicName string, partitions int32, replicationFactor int16, config map[string]*string) (*topics.Topic, error) {
+func (c *Cluster) APICreateTopic(topicName string, partitions int32, replicationFactor int16, config map[string]*string) (*models.Topic, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
@@ -25,21 +27,40 @@ func (c *Cluster) APICreateTopic(topicName string, partitions int32, replication
 		return nil, fmt.Errorf("error from kafka: %w", err)
 	}
 
-	topic := &topics.Topic{
+	topic := &models.Topic{
 		Name:       topicName,
 		Partitions: partitions,
 		Config:     config,
 	}
 
-	topicMessage := &TopicMessage{
+	pbTopic := &internal_topics_pb.Topic{
+		Name:       topicName,
+		Partitions: partitions,
+		Config:     make(map[string]*wrapperspb.StringValue),
+	}
+
+	for key, value := range topic.Config {
+		var v *wrapperspb.StringValue
+		if value != nil {
+			v = wrapperspb.String(*value)
+		}
+		pbTopic.Config[key] = v
+	}
+
+	topicMessage := &internal_topics_pb.TopicMessageValue{
 		Name:    topicName,
-		Action:  TopicMessageActionCreate,
+		Action:  internal_topics_pb.TopicMessageValue_ACTION_CREATE,
 		Cluster: c.Name,
-		Topic:   topic,
+		Topic:   pbTopic,
 	}
 
 	kafkaClient := c.controller.franzKafkaClient
-	topicMessageBytes, _ := json.Marshal(topicMessage)
+	topicMessageBytes, err := proto.Marshal(topicMessage)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: do we make the key TopicMessageValue (without Action) and value the Topic?
 	record := kgo.KeySliceRecord([]byte(fmt.Sprintf("cluster-%s-topic-%s", c.Name, topicName)), topicMessageBytes)
 	record.Topic = InternalTopicTopicConfig
 	produceResp := kafkaClient.ProduceSync(context.TODO(), record)
@@ -50,7 +71,7 @@ func (c *Cluster) APICreateTopic(topicName string, partitions int32, replication
 	return topic, nil
 }
 
-func (c *Cluster) APIGetTopic(topicName string) (*topics.Topic, error) {
+func (c *Cluster) APIGetTopic(topicName string) (*models.Topic, error) {
 	// TODO: wait to be synced
 
 	topic, ok := c.topics.Load(topicName)
@@ -61,7 +82,7 @@ func (c *Cluster) APIGetTopic(topicName string) (*topics.Topic, error) {
 	return topic, nil
 }
 
-func (c *Cluster) APIUpdateTopic(topicName string, partitions int32, config map[string]*string) (*topics.Topic, error) {
+func (c *Cluster) APIUpdateTopic(topicName string, partitions int32, config map[string]*string) (*models.Topic, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
@@ -129,21 +150,39 @@ func (c *Cluster) APIUpdateTopic(topicName string, partitions int32, config map[
 		}
 	}
 
-	topic = &topics.Topic{
+	topic = &models.Topic{
 		Name:       topicName,
 		Partitions: partitions,
 		Config:     config,
 	}
 
-	topicMessage := &TopicMessage{
+	pbTopic := &internal_topics_pb.Topic{
+		Name:       topicName,
+		Partitions: partitions,
+		Config:     make(map[string]*wrapperspb.StringValue),
+	}
+
+	for key, value := range topic.Config {
+		var v *wrapperspb.StringValue
+		if value != nil {
+			v = wrapperspb.String(*value)
+		}
+		pbTopic.Config[key] = v
+	}
+
+	topicMessage := &internal_topics_pb.TopicMessageValue{
 		Name:    topicName,
-		Action:  TopicMessageActionUpdate,
+		Action:  internal_topics_pb.TopicMessageValue_ACTION_UPDATE,
 		Cluster: c.Name,
-		Topic:   topic,
+		Topic:   pbTopic,
 	}
 
 	kafkaClient := c.controller.franzKafkaClient
-	topicMessageBytes, _ := json.Marshal(topicMessage)
+	topicMessageBytes, err := proto.Marshal(topicMessage)
+	if err != nil {
+		return nil, err
+	}
+
 	record := kgo.KeySliceRecord([]byte(fmt.Sprintf("cluster-%s-topic-%s", c.Name, topic.Name)), topicMessageBytes)
 	record.Topic = InternalTopicTopicConfig
 	produceResp := kafkaClient.ProduceSync(context.TODO(), record)
@@ -169,14 +208,18 @@ func (c *Cluster) APIDeleteTopicCluster(topicName string) error {
 		}
 	}
 
-	topicMessage := &TopicMessage{
+	topicMessage := &internal_topics_pb.TopicMessageValue{
 		Name:    topicName,
-		Action:  TopicMessageActionDelete,
+		Action:  internal_topics_pb.TopicMessageValue_ACTION_DELETE,
 		Cluster: c.Name,
 	}
 
 	kafkaClient := c.controller.franzKafkaClient
-	topicMessageBytes, _ := json.Marshal(topicMessage)
+	topicMessageBytes, err := proto.Marshal(topicMessage)
+	if err != nil {
+		return err
+	}
+
 	record := kgo.KeySliceRecord([]byte(fmt.Sprintf("cluster-%s-topic-%s", c.Name, topicName)), topicMessageBytes)
 	record.Topic = InternalTopicTopicConfig
 	produceResp := kafkaClient.ProduceSync(context.TODO(), record)

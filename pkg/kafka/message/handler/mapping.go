@@ -3,6 +3,8 @@ package handler
 import (
 	handlerAPIVersionV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/api_version/v0"
 	handlerAPIVersionV2 "github.com/rmb938/krouter/pkg/kafka/message/handler/api_version/v2"
+	handlerCreateAclsV1 "github.com/rmb938/krouter/pkg/kafka/message/handler/create_acls/v1"
+	handlerDescribeAclsV1 "github.com/rmb938/krouter/pkg/kafka/message/handler/describe_acls/v1"
 	handlerDescribeConfigsV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/describe_configs/v0"
 	handlerDescribeGroupsV0 "github.com/rmb938/krouter/pkg/kafka/message/handler/describe_groups/v0"
 	handlerFetchV1 "github.com/rmb938/krouter/pkg/kafka/message/handler/fetch/v1"
@@ -39,6 +41,10 @@ import (
 	implAPIVersion "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version"
 	implAPIVersionV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v0"
 	implAPIVersionV2 "github.com/rmb938/krouter/pkg/kafka/message/impl/api_version/v2"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/create_acls"
+	implCreateAclsV1 "github.com/rmb938/krouter/pkg/kafka/message/impl/create_acls/v1"
+	"github.com/rmb938/krouter/pkg/kafka/message/impl/describe_acls"
+	implDescribeAclsV1 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_acls/v1"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/describe_configs"
 	implDescribeConfigsV0 "github.com/rmb938/krouter/pkg/kafka/message/impl/describe_configs/v0"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/describe_groups"
@@ -154,5 +160,11 @@ var MessageHandlerMapping = map[int16]map[int16]handler.MessageHandler{
 	},
 	describe_configs.Key: {
 		implDescribeConfigsV0.Version: &handlerDescribeConfigsV0.Handler{},
+	},
+	describe_acls.Key: {
+		implDescribeAclsV1.Version: &handlerDescribeAclsV1.Handler{},
+	},
+	create_acls.Key: {
+		implCreateAclsV1.Version: &handlerCreateAclsV1.Handler{},
 	},
 }
