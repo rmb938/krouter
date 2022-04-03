@@ -1,7 +1,6 @@
 package v2
 
 import (
-	"bytes"
 	"fmt"
 	"time"
 
@@ -16,79 +15,90 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
+func (h *Handler) Handle(broker *logical_broker.LogicalBroker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("fetch-v2-handler")
 
 	request := message.(*v2.Request)
 
 	response := &v2.Response{}
 
+	clusterRequests := make(map[*logical_broker.Cluster][]kmsg.FetchRequestTopic)
 	for _, requestedTopic := range request.Topics {
-		log = log.WithValues("topic", requestedTopic.Name)
-
-		topicResponse := v2.FetchTopicResponse{
-			Topic: requestedTopic.Name,
-		}
-
 		cluster := broker.GetClusterByTopic(requestedTopic.Name)
 
-		for _, partition := range requestedTopic.Partitions {
-			log = log.WithValues("partition", partition.Partition)
-
-			partitionResponse := v2.FetchPartitionResponse{
-				PartitionIndex: partition.Partition,
+		if cluster == nil {
+			topicResponse := v2.FetchTopicResponse{
+				Topic: requestedTopic.Name,
 			}
 
-			if cluster == nil {
-				partitionResponse.ErrCode = errors.UnknownTopicOrPartition
+			for _, partition := range requestedTopic.Partitions {
+				partitionResponse := v2.FetchPartitionResponse{
+					PartitionIndex: partition.Partition,
+					ErrCode:        errors.UnknownTopicOrPartition,
+				}
 				topicResponse.Partitions = append(topicResponse.Partitions, partitionResponse)
-				continue
 			}
 
-			kafkaFetchRequest := kmsg.NewPtrFetchRequest()
-			kafkaFetchRequest.ReplicaID = -1
-			kafkaFetchRequest.MaxWaitMillis = int32(request.MaxWait.Milliseconds())
-			kafkaFetchRequest.MinBytes = request.MinBytes
+			response.Responses = append(response.Responses, topicResponse)
+			continue
+		}
 
-			kafkaFetchRequestTopic := kmsg.NewFetchRequestTopic()
-			kafkaFetchRequestTopic.Topic = requestedTopic.Name
+		topicRequests, ok := clusterRequests[cluster]
+		if !ok {
+			topicRequests = make([]kmsg.FetchRequestTopic, 0)
+		}
 
+		kafkaFetchRequestTopic := kmsg.NewFetchRequestTopic()
+		kafkaFetchRequestTopic.Topic = requestedTopic.Name
+
+		for _, partition := range requestedTopic.Partitions {
 			kafkaFetchRequestTopicPartition := kmsg.NewFetchRequestTopicPartition()
 			kafkaFetchRequestTopicPartition.Partition = partition.Partition
 			kafkaFetchRequestTopicPartition.FetchOffset = partition.FetchOffset
 			kafkaFetchRequestTopicPartition.PartitionMaxBytes = partition.PartitionMaxBytes
-
 			kafkaFetchRequestTopic.Partitions = append(kafkaFetchRequestTopic.Partitions, kafkaFetchRequestTopicPartition)
-
-			kafkaFetchRequest.Topics = append(kafkaFetchRequest.Topics, kafkaFetchRequestTopic)
-
-			kafkaFetchResponse, err := cluster.Fetch(requestedTopic.Name, partition.Partition, kafkaFetchRequest)
-			if err != nil {
-				log.Error(err, "Error fetch to backend cluster")
-				return nil, fmt.Errorf("error fetchto backend cluster: %w", err)
-			}
-
-			if int64(kafkaFetchResponse.ThrottleMillis) > response.ThrottleDuration.Milliseconds() {
-				response.ThrottleDuration = time.Duration(kafkaFetchResponse.ThrottleMillis) * time.Millisecond
-			}
-
-			block := kafkaFetchResponse.Topics[0].Partitions[0]
-
-			partitionResponse.ErrCode = errors.KafkaError(block.ErrorCode)
-			partitionResponse.HighWaterMark = block.HighWatermark
-
-			responseRecordByteBuff := bytes.NewBuffer([]byte{})
-			responseRecordByteBuff.Write(block.RecordBatches)
-
-			responseRecordByteBuffLen := responseRecordByteBuff.Len()
-			if responseRecordByteBuffLen > 0 {
-				partitionResponse.Records = responseRecordByteBuff.Bytes()
-			}
-
-			topicResponse.Partitions = append(topicResponse.Partitions, partitionResponse)
 		}
 
-		response.Responses = append(response.Responses, topicResponse)
+		topicRequests = append(topicRequests, kafkaFetchRequestTopic)
+
+		clusterRequests[cluster] = topicRequests
+	}
+
+	for cluster, topicRequests := range clusterRequests {
+		kafkaFetchRequest := kmsg.NewPtrFetchRequest()
+		kafkaFetchRequest.ReplicaID = -1
+		kafkaFetchRequest.MaxWaitMillis = int32(request.MaxWait.Milliseconds())
+		kafkaFetchRequest.MinBytes = request.MinBytes
+		kafkaFetchRequest.Topics = topicRequests
+
+		kafkaFetchResponse, err := cluster.Fetch(broker.BrokerID, kafkaFetchRequest)
+		if err != nil {
+			log.Error(err, "Error fetch to backend cluster")
+			return nil, fmt.Errorf("error fetchto backend cluster: %w", err)
+		}
+
+		if int64(kafkaFetchResponse.ThrottleMillis) > response.ThrottleDuration.Milliseconds() {
+			response.ThrottleDuration = time.Duration(kafkaFetchResponse.ThrottleMillis) * time.Millisecond
+		}
+
+		for _, responseTopic := range kafkaFetchResponse.Topics {
+			topicResponse := v2.FetchTopicResponse{
+				Topic: responseTopic.Topic,
+			}
+
+			for _, responsePartition := range responseTopic.Partitions {
+				partitionResponse := v2.FetchPartitionResponse{
+					PartitionIndex: responsePartition.Partition,
+					ErrCode:        errors.KafkaError(responsePartition.ErrorCode),
+					HighWaterMark:  responsePartition.HighWatermark,
+					Records:        responsePartition.RecordBatches,
+				}
+
+				topicResponse.Partitions = append(topicResponse.Partitions, partitionResponse)
+			}
+
+			response.Responses = append(response.Responses, topicResponse)
+		}
 	}
 
 	return response, nil

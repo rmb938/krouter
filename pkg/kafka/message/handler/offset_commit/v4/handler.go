@@ -13,7 +13,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
+func (h *Handler) Handle(broker *logical_broker.LogicalBroker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("offset-commit-v4-handler")
 	request := message.(*v4.Request)
 

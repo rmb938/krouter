@@ -14,7 +14,7 @@ import (
 )
 
 type Client struct {
-	Broker *logical_broker.Broker
+	Broker *logical_broker.LogicalBroker
 
 	log  logr.Logger
 	conn net.Conn
@@ -29,7 +29,7 @@ type Client struct {
 	}
 }
 
-func NewClient(log logr.Logger, broker *logical_broker.Broker, conn net.Conn) *Client {
+func NewClient(log logr.Logger, broker *logical_broker.LogicalBroker, conn net.Conn) *Client {
 	log = log.WithValues("from-address", conn.RemoteAddr().String())
 
 	return &Client{

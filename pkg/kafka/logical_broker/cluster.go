@@ -6,18 +6,10 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
-	"github.com/outcaste-io/ristretto"
 	"github.com/puzpuzpuz/xsync"
-	"github.com/rmb938/krouter/pkg/kafka/logical_broker/internal_topics_pb"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker/models"
-	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
-	"google.golang.org/protobuf/proto"
-)
-
-const (
-	ClusterTopicLeaderKeyFmt = "topic-%s-partition-%d"
 )
 
 type Cluster struct {
@@ -25,15 +17,13 @@ type Cluster struct {
 	log  logr.Logger
 
 	topicConfigSyncedOnce sync.Once
-	topicLeaderSyncedOnce sync.Once
 	syncedChan            chan struct{}
 
 	controller *Controller
 
 	franzKafkaClient *kgo.Client
 
-	topics           *xsync.MapOf[*models.Topic]
-	topicLeaderCache *ristretto.Cache
+	topics *xsync.MapOf[*models.Topic]
 }
 
 func NewCluster(name string, addrs []string, log logr.Logger, controller *Controller) (*Cluster, error) {
@@ -48,16 +38,6 @@ func NewCluster(name string, addrs []string, log logr.Logger, controller *Contro
 	}
 
 	if err := cluster.initFranzKafkaClient(addrs); err != nil {
-		return nil, err
-	}
-
-	var err error
-	cluster.topicLeaderCache, err = ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e7,     // number of keys to track frequency of (10M).
-		MaxCost:     1 << 30, // maximum cost of cache (1GB).
-		BufferItems: 64,      // number of keys per Get buffer.
-	})
-	if err != nil {
 		return nil, err
 	}
 
@@ -80,7 +60,6 @@ func (c *Cluster) initFranzKafkaClient(addrs []string) error {
 func (c *Cluster) WaitSynced() {
 	// Two loads, one for topic configs and one for leaders
 	<-c.syncedChan
-	<-c.syncedChan
 }
 
 func (c *Cluster) Close() error {
@@ -88,17 +67,7 @@ func (c *Cluster) Close() error {
 	return nil
 }
 
-func (c *Cluster) topicLeader(topic string, partition int32) (int32, error) {
-	brokerIDInterf, found := c.topicLeaderCache.Get(fmt.Sprintf(ClusterTopicLeaderKeyFmt, topic, partition))
-	if !found {
-		return -1, nil
-	}
-	return brokerIDInterf.(int32), nil
-}
-
 func (c *Cluster) TopicMetadata(ctx context.Context, topics []string) (*kmsg.MetadataResponse, error) {
-	kafkaClient := c.controller.franzKafkaClient
-
 	metadataRequest := kmsg.NewPtrMetadataRequest()
 	metadataRequest.AllowAutoTopicCreation = false // don't allow topic creation
 	metadataRequest.Topics = make([]kmsg.MetadataRequestTopic, 0)
@@ -113,74 +82,12 @@ func (c *Cluster) TopicMetadata(ctx context.Context, topics []string) (*kmsg.Met
 		return nil, err
 	}
 
-	metadataResponse := resp.(*kmsg.MetadataResponse)
-
-	for _, topic := range metadataResponse.Topics {
-		if topic.ErrorCode != int16(errors.None) {
-			continue
-		}
-
-		for _, partition := range topic.Partitions {
-			if partition.ErrorCode != int16(errors.None) {
-				continue
-			}
-
-			// publish topic partition leader
-			topicLeaderMessage := &internal_topics_pb.TopicLeaderMessageValue{
-				Name:      *topic.Topic,
-				Cluster:   c.Name,
-				Partition: partition.Partition,
-				Leader:    partition.Leader,
-			}
-			topicLeaderMessageBytes, err := proto.Marshal(topicLeaderMessage)
-			if err != nil {
-				c.log.Error(err, "error marshaling topic leader", "topic", *topic.Topic, "partition", partition.Partition, "leader", partition.Leader)
-			} else {
-				// TODO: do we make TopicLeaderMessageValue (without Leader) the key and Leader the value?
-				record := kgo.KeySliceRecord([]byte(fmt.Sprintf("cluster-%s-topic-%s-partition-%d", c.Name, *topic.Topic, partition.Partition)), topicLeaderMessageBytes)
-				record.Topic = InternalTopicTopicLeader
-				produceResp := kafkaClient.ProduceSync(ctx, record)
-				if produceResp.FirstErr() != nil {
-					return nil, produceResp.FirstErr()
-				}
-			}
-		}
-	}
-
-	return metadataResponse, nil
+	return resp.(*kmsg.MetadataResponse), nil
 }
 
-func (c *Cluster) Produce(transactionID *string, timeoutMillis int32, topics []kmsg.ProduceRequestTopic) (*kmsg.ProduceResponse, error) {
+func (c *Cluster) Produce(brokerID int32, transactionID *string, timeoutMillis int32, topics []kmsg.ProduceRequestTopic) (*kmsg.ProduceResponse, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
-
-	// get leader from first topic since all topics and partitions in this request should be to the same leader
-	//  if our cache has the wrong one some (or all) of our topics will error and the client will refresh metadata
-	leaderID, err := c.topicLeader(topics[0].Topic, topics[0].Partitions[0].Partition)
-	if err != nil {
-		return nil, err
-	}
-
-	if leaderID == -1 {
-		resp := kmsg.NewPtrProduceResponse()
-
-		for _, topic := range topics {
-			respTopic := kmsg.NewProduceResponseTopic()
-			respTopic.Topic = topic.Topic
-
-			for _, partition := range topic.Partitions {
-				respPartition := kmsg.NewProduceResponseTopicPartition()
-				respPartition.Partition = partition.Partition
-				respPartition.ErrorCode = int16(errors.NotLeaderOrFollower)
-
-				respTopic.Partitions = append(respTopic.Partitions, respPartition)
-			}
-
-			resp.Topics = append(resp.Topics, respTopic)
-		}
-
-		return resp, err
-	}
 
 	req := &kmsg.ProduceRequest{
 		TransactionID: transactionID,
@@ -188,7 +95,7 @@ func (c *Cluster) Produce(transactionID *string, timeoutMillis int32, topics []k
 		Topics:        topics,
 	}
 
-	response, err := c.franzKafkaClient.Broker(int(leaderID)).RetriableRequest(ctx, req)
+	response, err := c.franzKafkaClient.Broker(int(brokerID)).RetriableRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -196,33 +103,11 @@ func (c *Cluster) Produce(transactionID *string, timeoutMillis int32, topics []k
 	return response.(*kmsg.ProduceResponse), nil
 }
 
-func (c *Cluster) ListOffsets(topicName string, partition int32, request *kmsg.ListOffsetsRequest) (*kmsg.ListOffsetsResponse, error) {
+func (c *Cluster) ListOffsets(brokerID int32, request *kmsg.ListOffsetsRequest) (*kmsg.ListOffsetsResponse, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	leaderID, err := c.topicLeader(topicName, partition)
-	if err != nil {
-		return nil, err
-	}
-
-	if leaderID == -1 {
-		// can't find topic partition leader
-		response := kmsg.NewPtrListOffsetsResponse()
-
-		responseTopic := kmsg.NewListOffsetsResponseTopic()
-		responseTopic.Topic = topicName
-
-		responsePartition := kmsg.NewListOffsetsResponseTopicPartition()
-		responsePartition.Partition = partition
-		responsePartition.ErrorCode = int16(errors.UnknownTopicOrPartition)
-
-		responseTopic.Partitions = append(responseTopic.Partitions, responsePartition)
-
-		response.Topics = append(response.Topics, responseTopic)
-		return response, nil
-	}
-
-	response, err := c.franzKafkaClient.Broker(int(leaderID)).RetriableRequest(ctx, request)
+	response, err := c.franzKafkaClient.Broker(int(brokerID)).RetriableRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -230,35 +115,11 @@ func (c *Cluster) ListOffsets(topicName string, partition int32, request *kmsg.L
 	return response.(*kmsg.ListOffsetsResponse), nil
 }
 
-func (c *Cluster) Fetch(topicName string, partition int32, request *kmsg.FetchRequest) (*kmsg.FetchResponse, error) {
+func (c *Cluster) Fetch(brokerID int32, request *kmsg.FetchRequest) (*kmsg.FetchResponse, error) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	leaderID, err := c.topicLeader(topicName, partition)
-	if err != nil {
-		return nil, err
-	}
-
-	if leaderID == -1 {
-		// can't find topic leader
-		response := kmsg.NewPtrFetchResponse()
-		response.SessionID = request.SessionID
-
-		responseTopic := kmsg.NewFetchResponseTopic()
-		responseTopic.Topic = topicName
-
-		responseTopicPartition := kmsg.NewFetchResponseTopicPartition()
-		responseTopicPartition.Partition = partition
-		responseTopicPartition.ErrorCode = int16(errors.UnknownTopicOrPartition)
-
-		responseTopic.Partitions = append(responseTopic.Partitions, responseTopicPartition)
-
-		response.Topics = append(response.Topics, responseTopic)
-
-		return response, nil
-	}
-
-	response, err := c.franzKafkaClient.Broker(int(leaderID)).RetriableRequest(ctx, request)
+	response, err := c.franzKafkaClient.Broker(int(brokerID)).RetriableRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}

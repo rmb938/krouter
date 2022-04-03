@@ -1,8 +1,6 @@
 package v0
 
 import (
-	"math"
-
 	"github.com/go-logr/logr"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
 	"github.com/rmb938/krouter/pkg/kafka/message/impl/errors"
@@ -13,7 +11,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
+func (h *Handler) Handle(broker *logical_broker.LogicalBroker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("find-coordinator-v2-handler")
 
 	request := message.(*v0.Request)
@@ -27,12 +25,19 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 
 	if kafkaResponse.ErrorCode != int16(errors.None) {
 		response.ErrCode = errors.KafkaError(kafkaResponse.ErrorCode)
-	} else {
-		response.ErrCode = errors.None
-		response.NodeID = math.MaxInt32
-		response.Host = broker.AdvertiseListener.IP.String()
-		response.Port = int32(broker.AdvertiseListener.Port)
+		return response, nil
 	}
+
+	brokerCoordinator := broker.GetBroker(kafkaResponse.NodeID)
+	if brokerCoordinator == nil {
+		response.ErrCode = errors.CoordinatorNotAvailable
+		return response, nil
+	}
+
+	response.ErrCode = errors.None
+	response.NodeID = brokerCoordinator.ID
+	response.Host = brokerCoordinator.Endpoint.Host
+	response.Port = brokerCoordinator.Endpoint.Port
 
 	return response, nil
 }

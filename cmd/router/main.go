@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -34,12 +35,14 @@ func (m *MultiFlag) Set(val string) error {
 
 func main() {
 	var clusterID string
+	var brokerID int64
 	var listener string
 	var advertiseListener string
 	var apiListener string
 	var redisAddressesFlag MultiFlag
 
 	flag.StringVar(&clusterID, "cluster-id", "some-cluster-id", "The Kafka cluster ID")
+	flag.Int64Var(&brokerID, "broker-id", -1, "The Broker ID")
 	flag.StringVar(&listener, "listener", "127.0.0.1:29092", "The address to listener on")
 	flag.StringVar(&advertiseListener, "advertise-listener", "localhost:29092", "The address to advertise to clients")
 	flag.StringVar(&apiListener, "api-listener", "127.0.0.1:6060", "The api address to listener on")
@@ -67,6 +70,16 @@ func main() {
 	logr := zapr.NewLogger(zapLog)
 	setupLog := logr.WithName("setup")
 
+	if brokerID < 1 {
+		setupLog.Error(fmt.Errorf("broker ID must be at least %d", 1), "error parsing brokerID")
+		os.Exit(1)
+	}
+
+	if brokerID > math.MaxInt32 {
+		setupLog.Error(fmt.Errorf("broker ID must be at most %d", math.MaxInt32), "error parsing brokerID")
+		os.Exit(1)
+	}
+
 	listenerAddr, err := net.ResolveTCPAddr("tcp", listener)
 	if err != nil {
 		setupLog.Error(err, "error parsing listener address")
@@ -79,7 +92,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	kafkaRouter, err := router.NewRouter(logr.WithName("router"), listenerAddr, advertiseListenerAddr, clusterID, redisAddresses)
+	kafkaRouter, err := router.NewRouter(logr.WithName("router"), listenerAddr, advertiseListenerAddr, clusterID, int32(brokerID), redisAddresses)
 	if err != nil {
 		setupLog.Error(err, "error creating router")
 		os.Exit(1)

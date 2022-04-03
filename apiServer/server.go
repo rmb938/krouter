@@ -12,10 +12,10 @@ import (
 type APIServer struct {
 	log    logr.Logger
 	server *http.Server
-	broker *logical_broker.Broker
+	broker *logical_broker.LogicalBroker
 }
 
-func NewAPIServer(log logr.Logger, addr string, broker *logical_broker.Broker) *APIServer {
+func NewAPIServer(log logr.Logger, addr string, broker *logical_broker.LogicalBroker) *APIServer {
 	s := &APIServer{log: log, broker: broker}
 
 	s.server = &http.Server{Addr: addr}

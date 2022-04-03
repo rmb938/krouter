@@ -3,7 +3,6 @@ package v8
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -16,7 +15,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
+func (h *Handler) Handle(broker *logical_broker.LogicalBroker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("metadata-v8-handler")
 
 	request := message.(*metadatav8.Request)
@@ -31,14 +30,21 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 	topics := request.Topics
 
 	response.ClusterID = &logicalBroker.ClusterID
-	response.ControllerID = math.MaxInt32
 
-	response.Brokers = append(response.Brokers, metadatav8.Brokers{
-		ID:   response.ControllerID,
-		Host: logicalBroker.AdvertiseListener.IP.String(),
-		Port: int32(logicalBroker.AdvertiseListener.Port),
-		Rack: func(s string) *string { return &s }("rack"),
-	})
+	for _, rb := range logicalBroker.GetRegisteredBrokers() {
+		response.Brokers = append(response.Brokers, metadatav8.Brokers{
+			ID:   rb.ID,
+			Host: rb.Endpoint.Host,
+			Port: rb.Endpoint.Port,
+			Rack: &rb.Rack,
+		})
+
+		// controller is always the biggest
+		//  this doesn't really matter tbh
+		if rb.ID > response.ControllerID {
+			response.ControllerID = rb.ID
+		}
+	}
 
 	if request.Topics == nil {
 		allTopics, err := logicalBroker.GetTopics()
@@ -98,10 +104,10 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 					ErrCode:         errors.KafkaError(partition.ErrorCode),
 					Index:           partition.Partition,
 					LeaderEpoch:     partition.LeaderEpoch,
-					LeaderID:        response.ControllerID,
-					ReplicaNodes:    []int32{response.ControllerID},
-					ISRNodes:        []int32{response.ControllerID},
-					OfflineReplicas: []int32{},
+					LeaderID:        partition.Leader,
+					ReplicaNodes:    partition.Replicas,
+					ISRNodes:        partition.ISR,
+					OfflineReplicas: partition.OfflineReplicas,
 				}
 
 				responseTopic.Partitions = append(responseTopic.Partitions, responsePartition)

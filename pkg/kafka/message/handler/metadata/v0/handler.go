@@ -3,7 +3,6 @@ package v0
 import (
 	"context"
 	"fmt"
-	"math"
 
 	"github.com/go-logr/logr"
 	"github.com/rmb938/krouter/pkg/kafka/logical_broker"
@@ -15,7 +14,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
+func (h *Handler) Handle(broker *logical_broker.LogicalBroker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("metadata-v8-handler")
 
 	request := message.(*metadatav0.Request)
@@ -27,11 +26,13 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 
 	topics := request.Topics
 
-	response.Brokers = append(response.Brokers, metadatav0.Brokers{
-		ID:   math.MaxInt32,
-		Host: logicalBroker.AdvertiseListener.IP.String(),
-		Port: int32(logicalBroker.AdvertiseListener.Port),
-	})
+	for _, rb := range logicalBroker.GetRegisteredBrokers() {
+		response.Brokers = append(response.Brokers, metadatav0.Brokers{
+			ID:   rb.ID,
+			Host: rb.Endpoint.Host,
+			Port: rb.Endpoint.Port,
+		})
+	}
 
 	if request.Topics == nil {
 		allTopics, err := logicalBroker.GetTopics()
@@ -84,9 +85,9 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 				responsePartition := metadatav0.Partitions{
 					ErrCode:      errors.KafkaError(partition.ErrorCode),
 					Index:        partition.Partition,
-					LeaderID:     math.MaxInt32,
-					ReplicaNodes: []int32{math.MaxInt32},
-					ISRNodes:     []int32{math.MaxInt32},
+					LeaderID:     partition.Leader,
+					ReplicaNodes: partition.Replicas,
+					ISRNodes:     partition.ISR,
 				}
 
 				responseTopic.Partitions = append(responseTopic.Partitions, responsePartition)

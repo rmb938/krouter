@@ -7,5 +7,5 @@ import (
 )
 
 type MessageHandler interface {
-	Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error)
+	Handle(broker *logical_broker.LogicalBroker, log logr.Logger, message message.Message) (message.Message, error)
 }

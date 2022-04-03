@@ -1,7 +1,6 @@
 package v11
 
 import (
-	"bytes"
 	"fmt"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
+func (h *Handler) Handle(broker *logical_broker.LogicalBroker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("fetch-v11-handler")
 
 	request := message.(*v11.Request)
@@ -27,106 +26,114 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 
 	responseSize := int64(0)
 
-topicLoop:
+	clusterRequests := make(map[*logical_broker.Cluster][]kmsg.FetchRequestTopic)
 	for _, requestedTopic := range request.Topics {
-		log = log.WithValues("topic", requestedTopic.Name)
+		cluster := broker.GetClusterByTopic(requestedTopic.Name)
 
-		if responseSize >= int64(request.MaxBytes) {
+		if cluster == nil {
+			topicResponse := v11.FetchTopicResponse{
+				Topic: requestedTopic.Name,
+			}
+
+			for _, partition := range requestedTopic.Partitions {
+				partitionResponse := v11.FetchPartitionResponse{
+					PartitionIndex: partition.Partition,
+					ErrCode:        errors.UnknownTopicOrPartition,
+				}
+				topicResponse.Partitions = append(topicResponse.Partitions, partitionResponse)
+			}
+
+			response.Responses = append(response.Responses, topicResponse)
 			continue
 		}
 
-		topicResponse := v11.FetchTopicResponse{
-			Topic: requestedTopic.Name,
+		topicRequests, ok := clusterRequests[cluster]
+		if !ok {
+			topicRequests = make([]kmsg.FetchRequestTopic, 0)
 		}
 
-		cluster := broker.GetClusterByTopic(requestedTopic.Name)
+		kafkaFetchRequestTopic := kmsg.NewFetchRequestTopic()
+		kafkaFetchRequestTopic.Topic = requestedTopic.Name
 
 		for _, partition := range requestedTopic.Partitions {
-			log = log.WithValues("partition", partition.Partition)
-
-			if responseSize >= int64(request.MaxBytes) {
-				continue
-			}
-
-			partitionResponse := v11.FetchPartitionResponse{
-				PartitionIndex:       partition.Partition,
-				PreferredReadReplica: 1,
-			}
-
-			if cluster == nil {
-				partitionResponse.ErrCode = errors.UnknownTopicOrPartition
-				topicResponse.Partitions = append(topicResponse.Partitions, partitionResponse)
-				continue
-			}
-
-			kafkaFetchRequest := kmsg.NewPtrFetchRequest()
-			kafkaFetchRequest.ReplicaID = -1
-			kafkaFetchRequest.MaxWaitMillis = int32(request.MaxWait.Milliseconds())
-			kafkaFetchRequest.MinBytes = request.MinBytes
-			kafkaFetchRequest.MaxBytes = request.MaxBytes
-			kafkaFetchRequest.IsolationLevel = request.IsolationLevel
-			kafkaFetchRequest.SessionID = request.SessionID
-			kafkaFetchRequest.SessionEpoch = request.SessionEpoch
-			kafkaFetchRequest.Rack = request.RackID
-
-			kafkaFetchRequestTopic := kmsg.NewFetchRequestTopic()
-			kafkaFetchRequestTopic.Topic = requestedTopic.Name
-
 			kafkaFetchRequestTopicPartition := kmsg.NewFetchRequestTopicPartition()
 			kafkaFetchRequestTopicPartition.Partition = partition.Partition
 			kafkaFetchRequestTopicPartition.CurrentLeaderEpoch = partition.CurrentLeaderEpoch
 			kafkaFetchRequestTopicPartition.FetchOffset = partition.FetchOffset
 			kafkaFetchRequestTopicPartition.LogStartOffset = partition.LogStartOffset
 			kafkaFetchRequestTopicPartition.PartitionMaxBytes = partition.PartitionMaxBytes
-
 			kafkaFetchRequestTopic.Partitions = append(kafkaFetchRequestTopic.Partitions, kafkaFetchRequestTopicPartition)
-
-			kafkaFetchRequest.Topics = append(kafkaFetchRequest.Topics, kafkaFetchRequestTopic)
-
-			kafkaFetchResponse, err := cluster.Fetch(requestedTopic.Name, partition.Partition, kafkaFetchRequest)
-			if err != nil {
-				log.Error(err, "Error fetch to backend cluster")
-				return nil, fmt.Errorf("error fetchto backend cluster: %w", err)
-			}
-
-			if int64(kafkaFetchResponse.ThrottleMillis) > response.ThrottleDuration.Milliseconds() {
-				response.ThrottleDuration = time.Duration(kafkaFetchResponse.ThrottleMillis) * time.Millisecond
-			}
-
-			// something returned a high level error so stop everything and just return nothing
-			if kafkaFetchResponse.ErrorCode != int16(errors.None) {
-				response.ErrCode = errors.KafkaError(kafkaFetchResponse.ErrorCode)
-				response.Responses = nil
-				break topicLoop
-			}
-
-			block := kafkaFetchResponse.Topics[0].Partitions[0]
-
-			partitionResponse.ErrCode = errors.KafkaError(block.ErrorCode)
-			partitionResponse.HighWaterMark = block.HighWatermark
-			partitionResponse.LastStableOffset = block.LastStableOffset
-			partitionResponse.LogStartOffset = block.LogStartOffset
-
-			for _, blockAbortedTransaction := range block.AbortedTransactions {
-				partitionResponse.AbortedTransactions = append(partitionResponse.AbortedTransactions, v11.FetchAbortedTransaction{
-					ProducerID:  blockAbortedTransaction.ProducerID,
-					FirstOffset: blockAbortedTransaction.FirstOffset,
-				})
-			}
-
-			responseRecordByteBuff := bytes.NewBuffer([]byte{})
-			responseRecordByteBuff.Write(block.RecordBatches)
-
-			responseRecordByteBuffLen := responseRecordByteBuff.Len()
-			if responseRecordByteBuffLen > 0 {
-				responseSize += int64(responseRecordByteBuffLen)
-				partitionResponse.Records = responseRecordByteBuff.Bytes()
-			}
-
-			topicResponse.Partitions = append(topicResponse.Partitions, partitionResponse)
 		}
 
-		response.Responses = append(response.Responses, topicResponse)
+		topicRequests = append(topicRequests, kafkaFetchRequestTopic)
+
+		clusterRequests[cluster] = topicRequests
+	}
+
+topicLoop:
+	for cluster, topicRequests := range clusterRequests {
+		if responseSize >= int64(request.MaxBytes) {
+			continue
+		}
+
+		kafkaFetchRequest := kmsg.NewPtrFetchRequest()
+		kafkaFetchRequest.ReplicaID = -1
+		kafkaFetchRequest.MaxWaitMillis = int32(request.MaxWait.Milliseconds())
+		kafkaFetchRequest.MinBytes = request.MinBytes
+		kafkaFetchRequest.MaxBytes = request.MaxBytes
+		kafkaFetchRequest.IsolationLevel = request.IsolationLevel
+		kafkaFetchRequest.SessionID = request.SessionID
+		kafkaFetchRequest.SessionEpoch = request.SessionEpoch
+		kafkaFetchRequest.Rack = request.RackID
+		kafkaFetchRequest.Topics = topicRequests
+
+		kafkaFetchResponse, err := cluster.Fetch(broker.BrokerID, kafkaFetchRequest)
+		if err != nil {
+			log.Error(err, "Error fetch to backend cluster")
+			return nil, fmt.Errorf("error fetchto backend cluster: %w", err)
+		}
+
+		if int64(kafkaFetchResponse.ThrottleMillis) > response.ThrottleDuration.Milliseconds() {
+			response.ThrottleDuration = time.Duration(kafkaFetchResponse.ThrottleMillis) * time.Millisecond
+		}
+
+		// something returned a high level error so stop everything and just return nothing
+		if kafkaFetchResponse.ErrorCode != int16(errors.None) {
+			response.ErrCode = errors.KafkaError(kafkaFetchResponse.ErrorCode)
+			response.Responses = nil
+			break topicLoop
+		}
+
+		for _, responseTopic := range kafkaFetchResponse.Topics {
+			topicResponse := v11.FetchTopicResponse{
+				Topic: responseTopic.Topic,
+			}
+
+			for _, responsePartition := range responseTopic.Partitions {
+				partitionResponse := v11.FetchPartitionResponse{
+					PartitionIndex:       responsePartition.Partition,
+					ErrCode:              errors.KafkaError(responsePartition.ErrorCode),
+					HighWaterMark:        responsePartition.HighWatermark,
+					LastStableOffset:     responsePartition.LastStableOffset,
+					LogStartOffset:       responsePartition.LogStartOffset,
+					PreferredReadReplica: responsePartition.PreferredReadReplica,
+					Records:              responsePartition.RecordBatches,
+				}
+
+				responseSize += int64(len(partitionResponse.Records))
+
+				for _, responseAbortedTransaction := range responsePartition.AbortedTransactions {
+					partitionResponse.AbortedTransactions = append(partitionResponse.AbortedTransactions, v11.FetchAbortedTransaction{
+						ProducerID:  responseAbortedTransaction.ProducerID,
+						FirstOffset: responseAbortedTransaction.FirstOffset,
+					})
+				}
+
+				topicResponse.Partitions = append(topicResponse.Partitions, partitionResponse)
+			}
+
+			response.Responses = append(response.Responses, topicResponse)
+		}
 	}
 
 	return response, nil

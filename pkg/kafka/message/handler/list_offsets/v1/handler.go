@@ -15,7 +15,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
+func (h *Handler) Handle(broker *logical_broker.LogicalBroker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("list-offsets-v5-handler")
 	request := message.(*v1.Request)
 
@@ -52,7 +52,7 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 
 			kafkaOffsetRequest.Topics = append(kafkaOffsetRequest.Topics, kafkaOffsetRequestTopic)
 
-			kafkaOffsetResponse, err := cluster.ListOffsets(requestTopic.Name, partition.PartitionIndex, kafkaOffsetRequest)
+			kafkaOffsetResponse, err := cluster.ListOffsets(broker.BrokerID, kafkaOffsetRequest)
 			if err != nil {
 				log.Error(err, "error listing offsets to backend cluster")
 				return nil, fmt.Errorf("error listing offsets to backend cluster: %w", err)

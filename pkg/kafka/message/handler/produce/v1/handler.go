@@ -15,7 +15,7 @@ import (
 type Handler struct {
 }
 
-func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message message.Message) (message.Message, error) {
+func (h *Handler) Handle(broker *logical_broker.LogicalBroker, log logr.Logger, message message.Message) (message.Message, error) {
 	log = log.WithName("produce-v1-handler")
 	request := message.(*v1.Request)
 
@@ -46,10 +46,9 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 		return response, nil
 	}
 
-	topicRequestByCluster := make(map[*logical_broker.Cluster][]kmsg.ProduceRequestTopic)
+	clusterRequests := make(map[*logical_broker.Cluster][]kmsg.ProduceRequestTopic)
 	for _, topicData := range request.TopicData {
 		cluster := broker.GetClusterByTopic(topicData.Name)
-
 		if cluster == nil {
 			produceResponse := v1.ProduceResponse{
 				Name:               topicData.Name,
@@ -63,31 +62,31 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 				produceResponse.PartitionResponses = append(produceResponse.PartitionResponses, partitionResponse)
 			}
 			response.Responses = append(response.Responses, produceResponse)
+			continue
 		}
 
-		topicRequests, ok := topicRequestByCluster[cluster]
+		clusterRequest, ok := clusterRequests[cluster]
 		if !ok {
-			topicRequests = make([]kmsg.ProduceRequestTopic, 0)
+			clusterRequest = make([]kmsg.ProduceRequestTopic, 0)
 		}
 
-		topicRequest := kmsg.NewProduceRequestTopic()
-		topicRequest.Topic = topicData.Name
-		topicRequest.Partitions = make([]kmsg.ProduceRequestTopicPartition, 0, len(topicData.PartitionData))
+		produceRequestTopic := kmsg.NewProduceRequestTopic()
+		produceRequestTopic.Topic = topicData.Name
 
 		for _, partitionData := range topicData.PartitionData {
-			produceTopicPartition := kmsg.NewProduceRequestTopicPartition()
+			produceRequestPartition := kmsg.NewProduceRequestTopicPartition()
+			produceRequestPartition.Partition = partitionData.Index
+			produceRequestPartition.Records = partitionData.Records
 
-			produceTopicPartition.Partition = partitionData.Index
-			produceTopicPartition.Records = partitionData.Records
-
-			topicRequest.Partitions = append(topicRequest.Partitions, produceTopicPartition)
+			produceRequestTopic.Partitions = append(produceRequestTopic.Partitions, produceRequestPartition)
 		}
 
-		topicRequestByCluster[cluster] = append(topicRequests, topicRequest)
+		clusterRequest = append(clusterRequest, produceRequestTopic)
+		clusterRequests[cluster] = clusterRequest
 	}
 
-	for cluster, produceRequests := range topicRequestByCluster {
-		kafkaResponse, err := cluster.Produce(nil, int32(request.TimeoutDuration.Milliseconds()), produceRequests)
+	for cluster, produceRequests := range clusterRequests {
+		kafkaResponse, err := cluster.Produce(broker.BrokerID, nil, int32(request.TimeoutDuration.Milliseconds()), produceRequests)
 		if err != nil {
 			log.Error(err, "Error producing message to backend cluster")
 			return nil, fmt.Errorf("error producing to kafka: %w", err)
@@ -99,19 +98,15 @@ func (h *Handler) Handle(broker *logical_broker.Broker, log logr.Logger, message
 			}
 
 			for _, kafkaRespTopic := range kafkaResponse.Topics {
-				produceResponse := v1.ProduceResponse{
-					Name:               kafkaRespTopic.Topic,
-					PartitionResponses: make([]v1.PartitionResponse, 0, len(kafkaRespTopic.Partitions)),
-				}
+				produceResponse := v1.ProduceResponse{}
+				produceResponse.Name = kafkaRespTopic.Topic
 
-				for _, kafkaRespTopicPartition := range kafkaRespTopic.Partitions {
-					produceResponsePartition := v1.PartitionResponse{
-						Index:      kafkaRespTopicPartition.Partition,
-						ErrCode:    errors.KafkaError(kafkaRespTopicPartition.ErrorCode),
-						BaseOffset: kafkaRespTopicPartition.BaseOffset,
-					}
-
-					produceResponse.PartitionResponses = append(produceResponse.PartitionResponses, produceResponsePartition)
+				for _, partitionResponse := range kafkaRespTopic.Partitions {
+					produceResponse.PartitionResponses = append(produceResponse.PartitionResponses, v1.PartitionResponse{
+						Index:      partitionResponse.Partition,
+						ErrCode:    errors.KafkaError(partitionResponse.ErrorCode),
+						BaseOffset: partitionResponse.BaseOffset,
+					})
 				}
 
 				response.Responses = append(response.Responses, produceResponse)

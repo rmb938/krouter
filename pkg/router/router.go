@@ -16,10 +16,10 @@ type Router struct {
 	requestHandler  *client.RequestPacketHandler
 	listener        net.Listener
 
-	Broker *logical_broker.Broker
+	Broker *logical_broker.LogicalBroker
 }
 
-func NewRouter(log logr.Logger, listener, advertiseListener *net.TCPAddr, clusterID string, redisAddresses []string) (*Router, error) {
+func NewRouter(log logr.Logger, listener, advertiseListener *net.TCPAddr, clusterID string, brokerID int32, redisAddresses []string) (*Router, error) {
 	r := &Router{log: log}
 
 	r.packetProcessor = &client.RequestPacketProcessor{
@@ -36,12 +36,12 @@ func NewRouter(log logr.Logger, listener, advertiseListener *net.TCPAddr, cluste
 		return nil, fmt.Errorf("error creating listener %w", err)
 	}
 
-	r.Broker, err = logical_broker.InitBroker(r.log, advertiseListener, clusterID, redisAddresses)
+	r.Broker, err = logical_broker.InitBroker(r.log, advertiseListener, clusterID, brokerID, redisAddresses)
 	if err != nil {
 		return nil, err
 	}
 
-	err = r.Broker.InitClusters()
+	err = r.Broker.Start()
 	if err != nil {
 		return nil, err
 	}

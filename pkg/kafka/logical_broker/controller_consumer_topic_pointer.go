@@ -59,17 +59,6 @@ func (c *Controller) CreateInternalTopics() error {
 			},
 		},
 		{
-			Name:              InternalTopicTopicLeader,
-			Partitions:        1,
-			ReplicationFactor: 1,
-			Config: map[string]*string{
-				// we only need to keep leaders for 24 hours
-				"retention.ms": kadm.StringPtr(strconv.Itoa(int((24 * time.Hour).Milliseconds()))),
-				// compression because why not
-				"compression.type": kadm.StringPtr("gzip"),
-			},
-		},
-		{
 			Name:              InternalTopicAcls,
 			Partitions:        1,
 			ReplicationFactor: 1,
@@ -78,6 +67,17 @@ func (c *Controller) CreateInternalTopics() error {
 				"cleanup.policy": kadm.StringPtr("compact"),
 				// compact at least every 24 hours
 				"max.compaction.lag.ms": kadm.StringPtr(strconv.Itoa(int((24 * time.Hour).Milliseconds()))),
+				// compression because why not
+				"compression.type": kadm.StringPtr("gzip"),
+			},
+		},
+		{
+			Name:              InternalTopicBrokers,
+			Partitions:        1,
+			ReplicationFactor: 1,
+			Config: map[string]*string{
+				// we only need to keep brokers for 24 hours
+				"retention.ms": kadm.StringPtr(strconv.Itoa(int((24 * time.Hour).Milliseconds()))),
 				// compression because why not
 				"compression.type": kadm.StringPtr("gzip"),
 			},
